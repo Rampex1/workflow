@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -25,21 +26,30 @@ Follow these constraints. Each one comes from a check that failed and was then f
 FENCE = re.compile(r"\A\s*```[\w+-]*\n(.*?)\n?```\s*\Z", re.S)
 
 
-def claude(role, payload, meta=None, timeout=None):
+def claude(role, payload, meta=None, timeout=None, effort="medium", max_output_tokens=8000):
+    """One stateless Claude call. effort + output cap bound runaway generations (seen: 77k tokens, $1.56)."""
     guide = (ROOT / ".claude" / "agents" / f"{role}.md").read_text().split("---", 2)[2]
-    if meta is not None:  # counted before the call: a killed (timed-out) call still happened
-        meta["llm_calls"] = meta.get("llm_calls", 0) + 1
-    reply = subprocess.run(
-        ["claude", "-p", "--tools", "", "--setting-sources", "project", "--output-format", "json",
-         "--no-session-persistence"],
-        input=f"{guide}\n\n{json.dumps(payload)}", capture_output=True, text=True,
-        cwd=ROOT, timeout=timeout or 180, check=True,
-    )
-    envelope = json.loads(reply.stdout)
-    if meta is not None:  # recorded before the error check: failed calls still cost money
-        meta["cost_usd"] = meta.get("cost_usd", 0) + (envelope.get("total_cost_usd") or 0)
-    if envelope.get("is_error") or not isinstance(envelope.get("result"), str):
-        raise ValueError(f"Claude returned an unsuccessful response for {role}")
+    meta = {} if meta is None else meta
+    meta["llm_calls"] = meta.get("llm_calls", 0) + 1  # counted before the call: a killed call still happened
+    try:
+        reply = subprocess.run(
+            ["claude", "-p", "--tools", "", "--setting-sources", "project", "--output-format", "json",
+             "--no-session-persistence", "--effort", effort],
+            input=f"{guide}\n\n{json.dumps(payload)}", capture_output=True, text=True, cwd=ROOT,
+            env={**os.environ, "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(max_output_tokens)},
+            timeout=timeout or 180,
+        )
+    except subprocess.TimeoutExpired:
+        meta["timeouts"] = meta.get("timeouts", 0) + 1  # killed: Claude never reports this call's cost
+        raise
+    try:
+        envelope = json.loads(reply.stdout)
+    except json.JSONDecodeError:  # crashed before replying: surface why instead of a bare exit code
+        raise RuntimeError(f"claude exited {reply.returncode}: {(reply.stderr or reply.stdout)[-500:]}") from None
+    # Recorded before the error check: failed calls (incl. output-cap hits) still cost money.
+    meta["cost_usd"] = meta.get("cost_usd", 0) + (envelope.get("total_cost_usd") or 0)
+    if reply.returncode or envelope.get("is_error") or not isinstance(envelope.get("result"), str):
+        raise ValueError(f"Claude returned an unsuccessful response for {role}: {str(envelope.get('result'))[:300]}")
     return envelope["result"]
 
 
@@ -50,13 +60,13 @@ def skill_body(path):
     return re.sub(r"<!--.*?-->", "", path.read_text().split("---", 2)[2], flags=re.S).strip()
 
 
-def work(skills, ctx):
+def work(opts, ctx):
     # Only human-approved constraints reach the model; raw lessons wait in `lessons --propose`.
     return claude(ctx.task.worker, {
         "task": ctx.task.spec, "dependencies": ctx.inputs, "failure": ctx.feedback,
-        "constraints": skill_body(skills / f"{ctx.task.worker}-constraints" / "SKILL.md"),
+        "constraints": skill_body(opts.skills / f"{ctx.task.worker}-constraints" / "SKILL.md"),
         "attempt": ctx.attempt,
-    }, ctx.meta, ctx.task.timeout)
+    }, ctx.meta, ctx.task.timeout, ctx.task.spec.get("effort", opts.effort), opts.max_output_tokens)
 
 
 def contains(task, output):
@@ -110,7 +120,7 @@ def prepare(tasks, plan_path):
 def usage(store, run_id):
     metas = [d["meta"] for _, _, kind, d in store.events(run_id)
              if kind in ("plan", "attempt") and isinstance(d, dict) and d.get("meta")]
-    return sum(m.get("llm_calls", 0) for m in metas), sum(m.get("cost_usd", 0) for m in metas)
+    return tuple(sum(m.get(k, 0) for m in metas) for k in ("llm_calls", "cost_usd", "timeouts"))
 
 
 def review_lessons(args, store):
@@ -154,8 +164,9 @@ def review_lessons(args, store):
     return pending
 
 
-def plan(objective, constraints, meta=None):
-    rows = json.loads(claude("planner", {"objective": objective, "constraints": constraints}, meta))
+def plan(objective, constraints, meta=None, opts=None):
+    rows = json.loads(claude("planner", {"objective": objective, "constraints": constraints}, meta, None,
+                             *((opts.effort, opts.max_output_tokens) if opts else ())))
     return [
         Task(row["id"], row["role"], spec={"brief": row["brief"], "contains": row["contains"]},
              deps=row["depends_on"], checks=["contains"],
@@ -169,6 +180,10 @@ def main():
     parser.add_argument("--db", default=".workflow/runs.db")
     parser.add_argument("--jobs", default=4, type=int)
     parser.add_argument("--skills", default=ROOT / ".claude" / "skills", type=Path)
+    parser.add_argument("--effort", default="medium", choices=("low", "medium", "high", "xhigh", "max"),
+                        help="Claude effort; a task's spec.effort overrides it")
+    parser.add_argument("--max-output-tokens", default=8000, type=int,
+                        help="per-call output cap; a call that hits it fails and is retried")
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("run", "resume", "status"):
         sub = commands.add_parser(name)
@@ -192,7 +207,7 @@ def main():
         if args.command == "lessons":
             print(json.dumps(review_lessons(args, store), indent=2))
             return 0
-        workers = dict.fromkeys(ROLES, partial(work, args.skills))
+        workers = dict.fromkeys(ROLES, partial(work, args))
         checks = {"contains": contains, "command": command}
         engine = Orchestrator(workers, checks, store=store, concurrency=args.jobs)
         if args.command == "status":
@@ -212,15 +227,16 @@ def main():
                 else:
                     meta = {}
                     try:
-                        tasks = plan(args.objective, constraints, meta)
+                        tasks = plan(args.objective, constraints, meta, args)
                     finally:
                         store.log(args.run_id, None, "plan", {"meta": meta})
                 validate(tasks, workers, checks)
             state = asyncio.run(engine.run(args.run_id, tasks, new=args.command == "run"))
         print(json.dumps({tid: {key: row[key] for key in ("status", "attempts", "output", "feedback")}
                           for tid, row in state.items()}, indent=2))
-        calls, cost = usage(store, args.run_id)
-        print(f"agentflow: {calls} Claude calls, ${cost:.4f} reported cost", file=sys.stderr)
+        calls, cost, timeouts = usage(store, args.run_id)
+        killed = f" ({timeouts} timed out, cost unknown)" if timeouts else ""
+        print(f"agentflow: {calls} Claude calls{killed}, ${cost:.4f} reported cost", file=sys.stderr)
         return int(args.command != "status" and any(row["status"] != DONE for row in state.values()))
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
         parser.exit(1, f"agentflow: {exc}\n")

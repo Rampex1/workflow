@@ -1,0 +1,14 @@
+{
+  "_doc": "PreToolUse guard for Bash. Each rule: regex `pattern` (Python re.search, case-sensitive) + `reason`; `decision` is ask (default: human approves in the prompt) or deny. First match wins, so put deny rules first.",
+  "rules": [
+    {"decision": "deny", "pattern": "\\brm\\s+(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\\b.*\\s(/|~|\\$HOME)/?(\\s|$|;|&|\\|)", "reason": "recursive delete of / or home"},
+    {"pattern": "\\brm\\s+(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\\b", "reason": "recursive delete"},
+    {"pattern": "\\bgit\\s+push\\b", "reason": "publishes commits to a remote"},
+    {"pattern": "\\bgit\\s+(reset\\s+--hard|clean\\s+-[a-zA-Z]*f|checkout\\s+--\\s|restore\\s)", "reason": "discards local changes"},
+    {"pattern": "\\bgit\\s+(branch\\s+-D|tag\\s+-d|filter-branch|filter-repo)\\b", "reason": "deletes or rewrites git history"},
+    {"pattern": "\\b(npm|pnpm|yarn)\\s+publish\\b|\\btwine\\s+upload\\b|\\bgh\\s+release\\s+create\\b", "reason": "publishes a package or release"},
+    {"pattern": "\\bterraform\\s+(apply|destroy)\\b|\\bkubectl\\s+(apply|delete|rollout)\\b|\\bhelm\\s+(install|upgrade|uninstall)\\b", "reason": "changes infrastructure"},
+    {"pattern": "(^|[;&|]\\s*|\\b(sh|bash|zsh)\\s+)(\\S*/)?deploy([-_.][\\w.-]*)?(\\s|$)|\\bmake\\s+deploy\\b|\\b(fly|railway|vercel)\\s+(deploy|up)\\b", "reason": "runs a deploy"},
+    {"pattern": "(?i)\\b(drop\\s+(table|database|schema)|truncate\\s+table)\\b", "reason": "destroys database data"}
+  ]
+}

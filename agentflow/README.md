@@ -26,10 +26,22 @@ before the command. The CLI stores text outputs and evidence in SQLite, invokes 
 with built-in tools disabled, and denies approval-gated tasks. The Python API
 supports project-specific workers and checks.
 
-Every run prints `agentflow: N Claude calls, $X reported cost` to stderr. The
-count includes calls that timed out; their cost is not reported by Claude, so
-the dollar figure is a lower bound. Per-attempt usage is in the `events` table.
-A task's `timeout` (seconds) overrides the default 180 s Claude call limit.
+Every run prints `agentflow: N Claude calls, $X reported cost` to stderr, and
+`(K timed out, cost unknown)` when a call was killed: Claude reports no cost for
+a killed call, so the dollar figure is then a lower bound. Per-attempt usage is
+in the `events` table. A task's `timeout` (seconds) overrides the default 180 s
+Claude call limit. When `claude` exits non-zero, its stderr becomes the attempt's
+feedback, and any cost it reported is still recorded.
+
+**Bounding each call.** Calls run with `--effort medium` (global `--effort`, or
+a task's `spec.effort`) and an output cap of 8000 tokens (`--max-output-tokens`,
+passed as `CLAUDE_CODE_MAX_OUTPUT_TOKENS`). Measured on the slugify task at the
+default effort, 1 in 3 calls ran away: 76,897 output tokens, 484 s and $1.56
+for a 1.4 KB answer, against about 6 s and $0.03 normally. Earlier runs lost 5
+of 9 calls to the 180 s timeout this way. At `medium`, 6 of 6 calls took
+4–9 s. A call that hits the cap ends with an error, which counts as a failed
+attempt, and its cost is reported. Claude Code retries internally up to about
+4× the cap first, so the worst case per call is about 32k tokens.
 
 ### CLI checks
 
@@ -72,12 +84,50 @@ python3 -m agentflow lessons --approve implementer # installs .claude/skills/imp
 python3 -m agentflow lessons --reject implementer  # or discard the draft
 ```
 
+Recorded loop (Nov 2026, slugify): the length lesson recurred in 2 runs, was
+proposed, rewritten by the reviewer as "URL slugs are at most 50 characters.
+Truncate at a word boundary…", and approved. The next 2 runs passed on the first
+attempt with 2 calls each (about $0.06), against 3–5 calls per run before.
+
+Lessons are grouped by worker type, so an approved constraint reaches every
+task of that type. Keep rules general, or scope them in the text ("URL slugs
+are…").
+
 Approving or rejecting marks those lessons as reviewed, so they are not proposed
 again. An approved skill's body (without frontmatter or HTML comments) is sent
 as `constraints` in every prompt for that worker type. It is also a normal
 Claude Code Skill for interactive sessions in this project. A new proposal for a
 worker that already has a skill starts from the current skill, so approving it
 replaces the file with the reviewed union.
+
+### Irreversible-command guard (Claude Code hook)
+
+`.claude/settings.json` registers a `PreToolUse` hook on Bash
+(`.claude/hooks/guard.py`) for interactive Claude Code sessions in this project.
+It checks each command against the rules in `.claude/irreversible.json` (regex,
+reason, and `ask` or `deny`; the first match wins). Default rules:
+
+| Decision | Matches |
+|---|---|
+| `deny` | recursive `rm` of `/`, `~` or `$HOME` |
+| `ask` | recursive `rm`, `git push`, `git reset --hard` / `clean -f` / `restore`, deleting branches or rewriting history, `npm`/`pnpm`/`yarn publish`, `twine upload`, `gh release create`, `terraform apply`/`destroy`, `kubectl apply`/`delete`, `helm install`/`upgrade`, deploy scripts at command position, `make deploy`, `DROP TABLE`/`TRUNCATE TABLE` |
+
+`ask` shows Claude Code's approval prompt, so a human decides. In headless
+`claude -p` nobody can answer, so `ask` acts as a denial. If the rules file can't
+be read or parsed, the guard asks before every Bash command instead of failing
+open.
+
+Verified in a fresh headless session (Nov 2026): `echo hello-control` ran, and
+`echo git push` was blocked with the rule's reason and listed in
+`permission_denials`.
+
+Edit the rules for your project and run `python3 -m pytest tests/test_guard.py`.
+The rules match the raw command text: this guard catches honest mistakes and is
+**not a security boundary**. Quoting or indirection can get past it, and it also
+fires on quoted text such as `echo "git push"`. That is a deliberate trade:
+anchoring rules to the command's position would miss `git -C repo push`.
+The orchestrator does not rely on it: workers run with no tools, and approval for
+gated tasks is enforced by the engine.
 
 ## Architecture
 
@@ -140,7 +190,7 @@ state = asyncio.run(orch.run("release-42", tasks))   # later: asyncio.run(orch.r
 
 - **The planner is optional, not a core component.** Calling an LLM to plan every run is the largest avoidable LLM cost. Here a plan is validated data.
 - **No LangGraph for now.** The whole engine, including storage, is about 230 lines of asyncio. LangGraph would duplicate the scheduling and checkpointing and add a heavy dependency. Reconsider it if you need streaming UIs, interrupt/resume across services, or its tooling.
-- **Hooks don't enforce runtime safety.** Claude Code hooks protect development sessions. Runtime approval is enforced by the engine itself, so it applies to every kind of worker, whether that's Python code, an HTTP call or `claude -p`, and doesn't depend on hook configuration.
+- **Hooks don't enforce runtime safety.** Claude Code hooks (the irreversible-command guard) protect interactive development sessions. Runtime approval is enforced by the engine itself, so it applies to every kind of worker, whether that's Python code, an HTTP call or `claude -p`, and doesn't depend on hook configuration.
 - **Approval is requested for each attempt.** An interrupted approval-gated task is marked failed on resume so the operator can reconcile its effects.
 - **Synchronous deadlines cannot kill Python threads.** A timed-out worker retains its slot and run lock until it exits. Configure I/O deadlines inside blocking workers.
 - **One runner per database and run ID.** Runs use an advisory file lock on macOS and Linux. Keep lock files beside the database.
@@ -151,9 +201,14 @@ state = asyncio.run(orch.run("release-42", tasks))   # later: asyncio.run(orch.r
 ## Current scope
 
 The Python engine, the Claude-backed CLI, the `contains` and `command` checks,
-usage accounting, and reviewed lessons → Skills are implemented. Tests exercise the Claude protocol with a
+usage accounting, reviewed lessons → Skills, and the irreversible-command hook
+are implemented. Tests exercise the Claude protocol with a
 local stub; `examples/slugify` runs against real Claude.
 
-## Next milestones
-1. **Approval hook**: a project hook that blocks commands with known
-   irreversible effects during interactive Claude Code sessions.
+## Possible next steps
+Every milestone in the original plan is done. Pick these up when a real project
+needs them:
+- **Sandboxed `command` check** (a container) for plans you didn't write.
+- **Per-plan lesson scope**, if worker-type grouping proves too coarse.
+- **A pause-for-approval CLI flow**: the CLI currently denies gated tasks;
+  `cli_approver` exists for Python API runs.

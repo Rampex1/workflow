@@ -68,3 +68,55 @@ print(json.dumps(dict(result=code, total_cost_usd=0.01)))
     out = json.loads(r.stdout)["code"]
     assert out["status"] == "done" and out["attempts"] == 2
     assert "agentflow: 2 Claude calls, $0.0200 reported cost" in r.stderr
+
+
+def test_effort_cap_and_timeout_accounting(tmp_path):
+    """Calls carry --effort and the output cap; a killed call is counted and flagged as unpriced."""
+    stub = tmp_path / "bin" / "claude"
+    stub.parent.mkdir()
+    stub.write_text(f"""#!{sys.executable}
+import json, os, sys, time
+payload = json.loads(sys.stdin.read().split('\\n\\n')[-1])
+assert sys.argv[sys.argv.index('--effort') + 1] == 'low'
+assert os.environ['CLAUDE_CODE_MAX_OUTPUT_TOKENS'] == '1234'
+if payload['attempt'] == 1:
+    time.sleep(30)
+print(json.dumps(dict(result='ok', total_cost_usd=0.01)))
+""")
+    stub.chmod(0o755)
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"tasks": [{"id": "a", "worker": "implementer", "timeout": 1,
+                                           "spec": {"brief": "b", "effort": "low"}}]}))
+    env = {**os.environ, "PATH": f"{stub.parent}:{os.environ['PATH']}"}
+    r = subprocess.run([sys.executable, "-m", "agentflow", "--db", str(tmp_path / "runs.db"),
+                        "--max-output-tokens", "1234", "run", "x", "--plan", str(plan)],
+                       cwd=ROOT, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["a"]["attempts"] == 2
+    assert "agentflow: 2 Claude calls (1 timed out, cost unknown), $0.0100 reported cost" in r.stderr
+
+
+def test_claude_crash_reports_stderr_and_keeps_cost(tmp_path):
+    stub = tmp_path / "bin" / "claude"
+    stub.parent.mkdir()
+    stub.write_text(f"""#!{sys.executable}
+import json, sys
+payload = json.loads(sys.stdin.read().split('\\n\\n')[-1])
+if payload['attempt'] == 1:
+    sys.exit("boom: auth expired")
+if payload['attempt'] == 2:
+    print(json.dumps(dict(result='API Error: rate limited', is_error=True, total_cost_usd=0.5)))
+    sys.exit(1)
+print(json.dumps(dict(result='ok', total_cost_usd=0.01)))
+""")
+    stub.chmod(0o755)
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"tasks": [{"id": "a", "worker": "implementer", "spec": {"brief": "b"}}]}))
+    env = {**os.environ, "PATH": f"{stub.parent}:{os.environ['PATH']}"}
+    r = subprocess.run([sys.executable, "-m", "agentflow", "--db", str(tmp_path / "runs.db"),
+                        "run", "x", "--plan", str(plan)], cwd=ROOT, env=env, capture_output=True, text=True)
+    a = json.loads(r.stdout)["a"]
+    assert a["status"] == "done" and a["attempts"] == 3
+    assert "claude exited 1: boom: auth expired" in a["feedback"][0]
+    assert "rate limited" in a["feedback"][1]
+    assert "$0.5100 reported cost" in r.stderr
