@@ -25,7 +25,8 @@ print(json.dumps(dict(result=result)))
     constraints.write_text('["Use plain text"]')
     env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"}
     root = Path(__file__).resolve().parents[1]
-    cli = [sys.executable, "-m", "agentflow", "--db", str(tmp_path / "runs.db")]
+    cli = [sys.executable, "-m", "agentflow", "--db", str(tmp_path / "runs.db"),
+           "--skills", str(tmp_path / "skills")]
 
     def invoke(*args):
         return json.loads(subprocess.check_output([*cli, *args], cwd=root, env=env, text=True))

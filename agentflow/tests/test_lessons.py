@@ -65,6 +65,31 @@ print(json.dumps(dict(result=payload['constraints'], total_cost_usd=0)))
     assert "<!--" not in constraints and "name:" not in constraints
 
 
+def test_approved_skills_reach_the_planner(tmp_path):
+    skill = tmp_path / "skills" / "implementer-constraints" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("---\nname: implementer-constraints\n---\n<!-- note -->\n- Slugs are at most 50 characters.\n")
+    stub = tmp_path / "bin" / "claude"
+    stub.parent.mkdir()
+    stub.write_text(f"""#!{sys.executable}
+import json, sys
+payload = json.loads(sys.stdin.read().split('\\n\\n')[-1])
+if 'objective' in payload:  # echo the planner's constraints back as the task brief
+    result = json.dumps([dict(id='a', role='implementer', brief=payload['constraints'],
+                              depends_on=[], contains=['x'], risk='contained')])
+else:
+    result = 'x' + json.dumps(payload['task']['brief'])
+print(json.dumps(dict(result=result, total_cost_usd=0)))
+""")
+    stub.chmod(0o755)
+    constraints = tmp_path / "c.json"
+    constraints.write_text('["Use plain text"]')
+    env = {**os.environ, "PATH": f"{stub.parent}:{os.environ['PATH']}"}
+    out, _ = cli(tmp_path, "run", "x", "--objective", "o", "--constraints-from", str(constraints), env=env)
+    assert json.loads(out["a"]["output"][1:]) == [
+        "Use plain text", "For implementer tasks:\n- Slugs are at most 50 characters."]
+
+
 def test_reject_discards_proposal_and_marks_reviewed(tmp_path):
     seed(tmp_path)
     cli(tmp_path, "lessons", "--propose", "--min-count", "1")

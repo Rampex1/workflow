@@ -225,6 +225,10 @@ def main():
                 if args.plan:
                     tasks = prepare(load_plan(args.plan), args.plan)
                 else:
+                    # Learning edge: approved skills also reach the splitter, so they shape how work is cut.
+                    constraints += [f"For {d.name.removesuffix('-constraints')} tasks:\n{body}"
+                                    for d in sorted(args.skills.glob("*-constraints"))
+                                    if (body := skill_body(d / "SKILL.md"))]
                     meta = {}
                     try:
                         tasks = plan(args.objective, constraints, meta, args)

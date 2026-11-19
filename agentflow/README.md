@@ -95,7 +95,9 @@ are…").
 
 Approving or rejecting marks those lessons as reviewed, so they are not proposed
 again. An approved skill's body (without frontmatter or HTML comments) is sent
-as `constraints` in every prompt for that worker type. It is also a normal
+as `constraints` in every prompt for that worker type. With `--objective`, every
+approved skill also goes to the planner (after any `--constraints-from` items), so
+the rules shape how the work is split and checked. It is also a normal
 Claude Code Skill for interactive sessions in this project. A new proposal for a
 worker that already has a skill starts from the current skill, so approving it
 replaces the file with the reviewed union.
