@@ -1,6 +1,6 @@
 ---
 name: feature
-description: Build a feature or fix in an existing codebase end to end, with little back-and-forth. Plan in plan mode with subagent research and an explicit list of decisions, write failing tests first, implement until they pass, run /code-review, then report with proposed CLAUDE.md lessons. Use when the user types /feature, or asks for a complete, well-researched implementation of a non-trivial change.
+description: Build a feature or fix in an existing codebase end to end, with little back-and-forth. Orchestrates the researcher, test-writer and reviewer subagents. Plan in plan mode with an explicit list of decisions, failing tests first, implement until they pass, independent review, then report with proposed CLAUDE.md lessons. Use when the user types /feature, or asks for a complete, well-researched implementation of a non-trivial change.
 argument-hint: <what to build or fix>
 ---
 
@@ -10,9 +10,11 @@ Task: $ARGUMENTS
 
 Corrections are cheap in a plan and expensive in code, so every question comes up before any edit. For a small task, keep the plan short, but never skip the approval or the tests.
 
+You are the orchestrator: delegate to the `researcher`, `test-writer` and `reviewer` subagents (use `Explore` or `general-purpose` if one isn't installed). A subagent knows only its brief, so give each one a self-contained brief: the goal, the relevant files, and what to return. Check what they return against files and test output; don't trust a summary.
+
 ## 1. Plan (plan mode)
 
-Enter plan mode unless you're already in it. Read `CLAUDE.md`, then research with parallel Explore subagents, each with one narrow question: where the change belongs, the most similar existing code to reuse, the conventions that apply, and the exact commands to run the relevant tests and the build or lint. Verify anything a decision rests on by reading the code yourself.
+Enter plan mode unless you're already in it. Read `CLAUDE.md`, then launch `researcher` subagents in parallel, in one message, each with one narrow question: where the change belongs, the most similar existing code to reuse, the conventions that apply, and the exact commands to run the relevant tests and the build or lint. Verify anything a decision rests on by reading the code yourself.
 
 The plan must contain:
 
@@ -26,7 +28,7 @@ Present it for approval. Apply every correction before going on.
 
 ## 2. Tests first
 
-Write the agreed tests following the codebase's conventions. Run them and confirm they fail for the expected reason, not an import or setup error.
+Give the `test-writer` the agreed test cases, the test conventions and the test command. It writes the tests and runs them. Confirm from its output that they fail for the expected reason, not an import or setup error.
 
 ## 3. Implement
 
@@ -37,7 +39,7 @@ Write the agreed tests following the codebase's conventions. Run them and confir
 
 ## 4. Review
 
-Run the `code-review` skill on the changes. Check each finding yourself, fix the real ones, rerun the commands, and note any finding you rejected and why.
+Give the `reviewer` the approved plan, the test command, and the instruction to read `git diff`. Don't send your reasoning, so it isn't anchored on your conclusions. For a large or risky change, also run the `code-review` skill. Check each finding yourself, fix the real ones, rerun the commands, and note any finding you rejected and why.
 
 ## 5. Report
 
