@@ -1,12 +1,13 @@
 # Theme
 theme = Catppuccin Mocha
 
-# Font settings
-font-family = JetBrains Mono
+# Font (JetBrains Mono is Ghostty's built-in default)
 font-size = 18
 
 # UI
-background-opacity = 0.90
+background-opacity = 0.9
 background-blur-radius = 20
-cursor-style = block
 mouse-hide-while-typing = true
+
+# Keyboard
+macos-option-as-alt = true
