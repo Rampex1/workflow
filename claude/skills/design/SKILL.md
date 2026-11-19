@@ -22,7 +22,11 @@ research/
   design/<slug>.md      # the design doc
 ```
 
-Subagents can't write there, so you save each finding after checking it. Each findings file starts with frontmatter listing its `sources:` (`path:line` or URL), then the answer, the evidence and the unknowns. Read any existing `research/` first, and reuse findings that are still true instead of researching again.
+Subagents can't write there, so you save each finding after checking it. Each findings file starts with frontmatter listing its `sources:` (`path:line` or URL) and `date:`, then the answer, the evidence and the unknowns. Never overwrite an existing findings file; append a dated update instead.
+
+Read any existing `research/` first. If this project was started before (the session was compacted or resumed), continue from what's there: reuse findings that are still true, don't reopen decisions already in `decisions.md`, and don't research again what's already saved.
+
+Never edit code or anything outside `research/`. This skill produces a design, not an implementation.
 
 ## 1. Requirements and questions
 
