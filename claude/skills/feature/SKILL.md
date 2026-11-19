@@ -24,7 +24,7 @@ Skip roles that add nothing; a docs-only change needs no `test-writer`. If one o
 
 ## 1. Plan (plan mode)
 
-Enter plan mode unless you're already in it. Read `CLAUDE.md` and everything in `context/` at the repo root (requirement docs and notes the user dropped there; it isn't committed), then launch the `researcher` agents in parallel, in one message, each with one narrow question: where the change belongs, the most similar existing code to reuse, the conventions that apply, and the exact commands to run the relevant tests and the build or lint. Verify anything a decision rests on by reading the code yourself.
+Enter plan mode unless you're already in it. Read `CLAUDE.md`, everything in `context/` at the repo root (requirement docs and notes the user dropped there; it isn't committed), and the relevant parts of `research/` (earlier findings, decisions and the design doc), then launch the `researcher` agents in parallel, in one message, each with one narrow question: where the change belongs, the most similar existing code to reuse, the conventions that apply, and the exact commands to run the relevant tests and the build or lint. Verify anything a decision rests on by reading the code yourself.
 
 The plan must contain:
 
@@ -36,6 +36,8 @@ The plan must contain:
 - **Done means:** the exact commands that must pass, and the test cases to add (inputs and expected behaviour, including edge cases and failure paths).
 
 Present it for approval. Apply every correction before going on.
+
+Once approved, keep a record in `research/` (local; if `git check-ignore -q research` fails, append `research/` to `.git/info/exclude`): save the final plan to `research/plans/<slug>.md`, each new research finding to `research/findings/<topic>.md` (frontmatter `sources:`, then the answer, evidence and unknowns), and the decisions to `research/decisions.md`.
 
 ## 2. Tests first
 

@@ -13,6 +13,17 @@ You are the orchestrator. The deliverable is a design doc that the user and thei
 
 A subagent knows only its brief, so give each one a self-contained brief: the goal, the relevant files or links, and what to return. Check what they return against the sources; don't trust a summary.
 
+**Keep a record in `research/`** at the repo root. It stays local: if `git check-ignore -q research` fails, append `research/` to `.git/info/exclude`.
+
+```
+research/
+  findings/<topic>.md   # one per research question
+  decisions.md          # every key decision
+  design/<slug>.md      # the design doc
+```
+
+Subagents can't write there, so you save each finding after checking it. Each findings file starts with frontmatter listing its `sources:` (`path:line` or URL), then the answer, the evidence and the unknowns. Read any existing `research/` first, and reuse findings that are still true instead of researching again.
+
 ## 1. Requirements and questions
 
 Gather context before writing anything, even when a requirements doc was given:
@@ -36,15 +47,15 @@ Choose the crew this project needs and say why. Typical members:
 - `researcher` agents, one narrow question each: where the project fits in the existing codebase, the most similar existing systems or patterns to reuse, conventions and platform constraints, and outside options (libraries, services, approaches) with tradeoffs.
 - Specialists as general-purpose agents with a role brief, only when a requirement calls for one: for example security, data modelling, performance or migration.
 
-Skip roles that add nothing. Launch the independent agents in parallel, in one message. Verify any finding a decision will rest on by reading the source yourself.
+Skip roles that add nothing. Launch the independent agents in parallel, in one message. Verify any finding a decision will rest on by reading the source yourself, then save each one to `research/findings/<topic>.md`.
 
 ## 3. Key decisions, then STOP
 
-For each decision that shapes the design, give two or three options with tradeoffs (complexity, risk, cost, fit with existing code), your recommendation, and which requirements it serves. Stop and get the user's choices before writing the doc.
+For each decision that shapes the design, give two or three options with tradeoffs (complexity, risk, cost, fit with existing code), your recommendation, and which requirements it serves. Stop and get the user's choices before writing the doc. Append each decision to `research/decisions.md`: the options, the choice, who approved it, the date, and the findings it rests on.
 
 ## 4. Write the doc
 
-Write it to `docs/design/<slug>.md`, or wherever the project keeps design docs. Sections:
+Write it to `research/design/<slug>.md`, citing the `research/findings/` files it draws on. Sections:
 
 1. **Context and problem:** why this project exists.
 2. **Goals and non-goals.**
@@ -69,4 +80,4 @@ Cite every claim about the codebase (`path:line`) and every outside fact (URL). 
 - The doc's path, and a five-line summary.
 - Decisions that need the mentor's sign-off.
 - Open questions and risks.
-- The milestones as ready-to-run commands: `/feature <milestone>, per docs/design/<slug>.md`.
+- The milestones as ready-to-run commands: `/feature <milestone>, per research/design/<slug>.md`.

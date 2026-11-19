@@ -20,6 +20,10 @@ Put anything that isn't in the codebase (a mentor's requirements doc, meeting no
 mkdir -p context && echo "context/" >> .git/info/exclude
 ```
 
+## Research
+
+The skills keep a record of their work in `research/` at the repo root: `findings/` (one cited file per research question), `decisions.md`, `design/<slug>.md` (from `/design`) and `plans/<slug>.md` (from `/feature`). It stays local: the skills add it to `.git/info/exclude`, and later runs reuse it.
+
 ## Skills
 
 - `/design <project or requirement docs>`: requirements and questions, research by a crew chosen for the project, key decisions for you to approve, then a cited design doc reviewed adversarially, ending with milestones sized for `/feature`.
