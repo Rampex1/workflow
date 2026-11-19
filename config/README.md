@@ -7,6 +7,7 @@ My terminal setup: Ghostty → tmux → Neovim (LazyVim), all on Catppuccin Moch
 | `ghostty/` | `~/.config/ghostty/` |
 | `tmux/`    | `~/.config/tmux/`    |
 | `nvim/`    | `~/.config/nvim/`    |
+| `claude/`  | `~/.claude/`         |
 
 ## Install
 
@@ -18,6 +19,7 @@ git clone https://github.com/tmux-plugins/tpm ~/.config/tmux/plugins/tpm
 
 # from this folder
 cp -R ghostty tmux nvim ~/.config/
+mkdir -p ~/.claude/skills && cp -R claude/skills/* ~/.claude/skills/
 ```
 
 Then start tmux and press `C-s I` to install tmux plugins. Open `nvim` once and lazy.nvim installs the plugins pinned in `lazy-lock.json`.
@@ -38,3 +40,5 @@ Extras (`:LazyExtras`): mini-files, json, typescript, mini-animate. Options: no 
 **Neovim**: stock [LazyVim keys](https://www.lazyvim.org/keymaps) (leader `Space`)
 
 **Ghostty**: reload config with `cmd+shift+,`.
+
+**Claude Code**: `/feature <task>` runs a change end to end: research with subagents, a plan you approve, failing tests first, implementation, a fresh-subagent review, then a report with proposed `CLAUDE.md` lessons.
