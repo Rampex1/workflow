@@ -55,6 +55,39 @@ Only hand-written `--plan` files can use `command`; planner-generated tasks get
 model-written code in a temp dir **without a sandbox**. Use a container for
 untrusted plans.
 
+### Fixing an issue in a codebase (`fix`)
+
+```sh
+python3 -m agentflow fix bug-123 --repo ~/work/app \
+  --issue "average() adds 1 to the result" \
+  --check "python -m pytest -q tests/test_stats.py" --readonly tests/
+```
+
+The result is a patch, `.workflow/bug-123-fix.patch`, which you review and
+apply with `git apply`. Your checkout is never modified.
+
+- **Gate first.** `--check` runs once on the current commit before any Claude
+  call. If it already passes, the run is refused, because it can't detect the issue. If it
+  fails, the first line is printed (stop there if it's a setup problem, e.g.
+  a missing module), and the output is sent to Claude as starting evidence.
+- **Each attempt runs in a fresh `git worktree`** of the pinned commit. Claude
+  gets Read/Edit/Write/Glob/Grep, plus Bash for exactly the `--check` command, in
+  `--restricted --permission-mode dontAsk` mode, which ignores the target
+  repo's settings and hooks. The output is the staged diff, with clutter like
+  `__pycache__/` and `node_modules/` excluded.
+- **The `diff_command` check** applies that diff to another fresh worktree,
+  fails if it touches a `--readonly` path (so "fixing" by editing the tests
+  is caught), and runs `--check`. A failure is fed back, up to 4 attempts.
+- Uncommitted changes in `--repo` are not included; the fix starts from `HEAD`.
+- Hand-written plans can use the same worker: `"worker": "coder"` with
+  `spec.repo` (relative to the plan file), `spec.check`, optional
+  `spec.readonly`, and `"checks": ["diff_command"]`. The planner can't assign
+  `coder` tasks. Each coder task starts from the base commit; a dependency's
+  diff reaches it as text, not as applied changes.
+
+Recorded run (Nov 2026): a one-line bug in a toy repo was fixed in 1 call,
+10 s, $0.04.
+
 ### Example: code that must pass hidden tests
 
 ```sh

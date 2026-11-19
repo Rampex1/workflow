@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 
@@ -24,18 +25,24 @@ description: Constraints learned from verified corrections of {worker} tasks. Ap
 ---
 Follow these constraints. Each one comes from a check that failed and was then fixed."""
 FENCE = re.compile(r"\A\s*```[\w+-]*\n(.*?)\n?```\s*\Z", re.S)
+NO_TOOLS = ("--tools", "", "--setting-sources", "project")
+CODER_TOOLS = ("Read", "Edit", "Write", "Glob", "Grep")
+CODER_TIMEOUT = 900
+# ponytail: fixed list of tool clutter a check run leaves behind; repos normally .gitignore it anyway.
+CLUTTER = tuple(f":(exclude,glob)**/{p}" for p in ("__pycache__/**", ".pytest_cache/**", "node_modules/**", ".DS_Store"))
 
 
-def claude(role, payload, meta=None, timeout=None, effort="medium", max_output_tokens=8000):
+def claude(role, payload, meta=None, timeout=None, effort="medium", max_output_tokens=8000,
+           cwd=ROOT, access=NO_TOOLS):
     """One stateless Claude call. effort + output cap bound runaway generations (seen: 77k tokens, $1.56)."""
     guide = (ROOT / ".claude" / "agents" / f"{role}.md").read_text().split("---", 2)[2]
     meta = {} if meta is None else meta
     meta["llm_calls"] = meta.get("llm_calls", 0) + 1  # counted before the call: a killed call still happened
     try:
         reply = subprocess.run(
-            ["claude", "-p", "--tools", "", "--setting-sources", "project", "--output-format", "json",
+            ["claude", "-p", *access, "--output-format", "json",
              "--no-session-persistence", "--effort", effort],
-            input=f"{guide}\n\n{json.dumps(payload)}", capture_output=True, text=True, cwd=ROOT,
+            input=f"{guide}\n\n{json.dumps(payload)}", capture_output=True, text=True, cwd=cwd,
             env={**os.environ, "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(max_output_tokens)},
             timeout=timeout or 180,
         )
@@ -69,6 +76,77 @@ def work(opts, ctx):
     }, ctx.meta, ctx.task.timeout, ctx.task.spec.get("effort", opts.effort), opts.max_output_tokens)
 
 
+def git(cwd, *args, **kw):
+    return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True, **kw).stdout
+
+
+@contextmanager
+def worktree(spec):
+    """A throwaway checkout of spec.base: attempts and checks never touch the real repo or each other."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tree = Path(tmp).resolve() / "tree"
+        git(spec["repo"], "worktree", "add", "--detach", "--quiet", str(tree), spec["base"])
+        try:
+            yield tree
+        finally:
+            git(spec["repo"], "worktree", "remove", "--force", str(tree))
+
+
+def code(opts, ctx):
+    """Coder worker: Claude edits a fresh worktree with file tools; the output is the staged diff.
+
+    Every attempt starts from spec.base, so a failed attempt leaves nothing behind and retries are clean.
+    """
+    # ponytail: every coder task starts from spec.base; dependency diffs are passed as text, not applied.
+    spec = ctx.task.spec
+    with worktree(spec) as tree:
+        access = ("--tools", ",".join((*CODER_TOOLS, "Bash")), "--restricted", "--strict-mcp-config",
+                  "--permission-mode", "dontAsk", "--allowedTools", *CODER_TOOLS, f"Bash({spec['check']})")
+        claude("coder", {
+            "task": {k: v for k, v in spec.items() if k not in ("repo", "base")},
+            "dependencies": ctx.inputs, "failure": ctx.feedback, "attempt": ctx.attempt,
+            "constraints": skill_body(opts.skills / "coder-constraints" / "SKILL.md"),
+        }, ctx.meta, ctx.task.timeout or CODER_TIMEOUT, spec.get("effort", opts.effort), opts.max_output_tokens,
+            cwd=tree, access=access)
+        git(tree, "add", "-A", "--", ".", *CLUTTER)
+        return git(tree, "diff", "--cached", "--binary")
+
+
+def failure(result):
+    """None on exit 0; otherwise a one-line summary (the future lesson), then the log tail."""
+    if not result.returncode:
+        return None
+    log = result.stdout + result.stderr
+    lines = [line for line in log.splitlines() if line.strip()]
+    # First line is the lesson: pytest's FAILED/ERROR summary, else the last line (e.g. an exception).
+    summary = "; ".join(l for l in lines if l.startswith(("FAILED ", "ERROR "))) or (lines[-1] if lines else "no output")
+    return f"exited {result.returncode}: {summary}\n{log[-3000:]}"
+
+
+def diff_command(task, output):
+    """Apply the diff to a fresh checkout of spec.base, refuse edits to spec.readonly, run spec.check."""
+    # ponytail: the check runs unsandboxed in a temp worktree; use a container for repos you don't trust.
+    if not isinstance(output, str) or not output.strip():
+        return "no changes: the diff is empty"
+    return run_check(task.spec, output)
+
+
+def run_check(spec, diff):
+    with worktree(spec) as tree:
+        if diff:
+            applied = subprocess.run(["git", "apply", "--binary"], cwd=tree, input=diff, capture_output=True, text=True)
+            if applied.returncode:
+                return f"diff does not apply: {applied.stderr.strip()[:500]}"
+        if spec.get("readonly"):
+            git(tree, "add", "-A")
+            touched = git(tree, "diff", "--cached", "--name-only", "--", *spec["readonly"]).split()
+            if touched:
+                return f"diff modifies read-only paths: {touched}"
+        result = subprocess.run(spec["check"], shell=True, cwd=tree, capture_output=True, text=True,
+                                timeout=spec.get("command_timeout", 300))
+    return failure(result)
+
+
 def contains(task, output):
     markers = task.spec.get("contains")
     if not isinstance(markers, list) or not markers or not all(isinstance(m, str) and m.strip() for m in markers):
@@ -96,18 +174,32 @@ def command(task, output):
         argv = [sys.executable if arg == "{python}" else arg for arg in spec["command"]]
         result = subprocess.run(argv, cwd=root, capture_output=True, text=True,
                                 timeout=spec.get("command_timeout", 120))
-    if result.returncode:
-        log = result.stdout + result.stderr
-        lines = [line for line in log.splitlines() if line.strip()]
-        # First line is the lesson: pytest's FAILED/ERROR summary, else the last line (e.g. an exception).
-        summary = "; ".join(l for l in lines if l.startswith(("FAILED ", "ERROR "))) or (lines[-1] if lines else "no output")
-        return f"exited {result.returncode}: {summary}\n{log[-3000:]}"
-    return None
+    return failure(result)
+
+
+def pin_repo(spec, relative_to):
+    """Resolve spec.repo and pin spec.base to a commit, so retries and resume start from the same code."""
+    if not (spec.get("repo") and isinstance(spec.get("check"), str) and spec["check"].strip()):
+        raise ValueError("a coder task needs spec.repo and spec.check (a shell command)")
+    spec["repo"] = str((Path(relative_to) / spec["repo"]).resolve())
+    spec["base"] = git(spec["repo"], "rev-parse", spec.get("base", "HEAD")).strip()
+    if git(spec["repo"], "status", "--porcelain"):
+        print(f"agentflow: {spec['repo']} has uncommitted changes; coder starts from commit {spec['base'][:12]}",
+              file=sys.stderr)
+    # The gate comes first: a check that already passes can't tell whether the issue was fixed.
+    before = run_check(spec, "")
+    if before is None:
+        raise ValueError(f"check already passes on {spec['base'][:12]}, so it can't detect the issue: {spec['check']}")
+    print(f"agentflow: check fails before the fix (expected). If this is a setup problem, stop now: "
+          f"{before.splitlines()[0]}", file=sys.stderr)
+    spec["failing_check"] = before  # starting evidence for the coder
 
 
 def prepare(tasks, plan_path):
     """Fail fast on malformed command specs and pin fixture paths so resume works from any cwd."""
     for t in tasks:
+        if t.worker == "coder":
+            pin_repo(t.spec, Path(plan_path).parent)
         if "command" not in t.checks:
             continue
         if not (isinstance(t.spec.get("command"), list) and t.spec["command"] and t.spec.get("output_file")):
@@ -167,6 +259,8 @@ def review_lessons(args, store):
 def plan(objective, constraints, meta=None, opts=None):
     rows = json.loads(claude("planner", {"objective": objective, "constraints": constraints}, meta, None,
                              *((opts.effort, opts.max_output_tokens) if opts else ())))
+    if bad := [row.get("role") for row in rows if row.get("role") not in ROLES]:
+        raise ValueError(f"planner chose roles outside {ROLES}: {bad}")  # only humans assign code-editing tasks
     return [
         Task(row["id"], row["role"], spec={"brief": row["brief"], "contains": row["contains"]},
              deps=row["depends_on"], checks=["contains"],
@@ -193,7 +287,14 @@ def main():
             source.add_argument("--objective")
             source.add_argument("--plan")
             sub.add_argument("--constraints-from", type=Path)
-    review = commands.add_parser("lessons", help="list, propose, approve or reject learned constraints")
+    fix = commands.add_parser("fix", help="fix an issue in a git repo; the result is a patch file")
+    fix.add_argument("run_id")
+    fix.add_argument("--issue", required=True, help="what is wrong and what 'fixed' means")
+    fix.add_argument("--check", required=True, help="shell command that must exit 0 once fixed, e.g. 'pytest -q'")
+    fix.add_argument("--repo", default=".", help="git repository to fix (default: current directory)")
+    fix.add_argument("--readonly", action="append", default=[], metavar="PATHSPEC",
+                     help="paths the fix must not touch, e.g. tests/ (repeatable)")
+    review =commands.add_parser("lessons", help="list, propose, approve or reject learned constraints")
     action = review.add_mutually_exclusive_group()
     action.add_argument("--propose", action="store_true")
     action.add_argument("--approve", metavar="WORKER")
@@ -207,8 +308,8 @@ def main():
         if args.command == "lessons":
             print(json.dumps(review_lessons(args, store), indent=2))
             return 0
-        workers = dict.fromkeys(ROLES, partial(work, args))
-        checks = {"contains": contains, "command": command}
+        workers = {**dict.fromkeys(ROLES, partial(work, args)), "coder": partial(code, args)}
+        checks = {"contains": contains, "command": command, "diff_command": diff_command}
         engine = Orchestrator(workers, checks, store=store, concurrency=args.jobs)
         if args.command == "status":
             state = store.load(args.run_id)
@@ -216,9 +317,13 @@ def main():
                 raise ValueError(f"unknown run {args.run_id!r}")
         else:
             tasks = None
+            if args.command in ("run", "fix") and store.load(args.run_id):
+                raise ValueError("Run already exists. Use resume or select another ID.")
+            if args.command == "fix":
+                spec = {"brief": args.issue, "repo": args.repo, "check": args.check, "readonly": args.readonly}
+                pin_repo(spec, Path.cwd())
+                tasks = [Task("fix", "coder", spec, checks=["diff_command"])]
             if args.command == "run":
-                if store.load(args.run_id):
-                    raise ValueError("Run already exists. Use resume or select another ID.")
                 constraints = json.loads(args.constraints_from.read_text()) if args.constraints_from else []
                 if not isinstance(constraints, list) or not all(isinstance(item, str) for item in constraints):
                     raise ValueError("Constraints must be a JSON array of strings")
@@ -235,9 +340,15 @@ def main():
                     finally:
                         store.log(args.run_id, None, "plan", {"meta": meta})
                 validate(tasks, workers, checks)
-            state = asyncio.run(engine.run(args.run_id, tasks, new=args.command == "run"))
+            state = asyncio.run(engine.run(args.run_id, tasks, new=args.command in ("run", "fix")))
         print(json.dumps({tid: {key: row[key] for key in ("status", "attempts", "output", "feedback")}
                           for tid, row in state.items()}, indent=2))
+        for tid, row in state.items():  # a finished coder task becomes a patch the human reviews and applies
+            if row["task"].worker == "coder" and row["status"] == DONE:
+                patch = (database.parent / f"{args.run_id}-{tid}.patch").resolve()
+                patch.write_text(row["output"])
+                print(f"agentflow: review, then apply with: git -C {row['task'].spec['repo']} apply {patch}",
+                      file=sys.stderr)
         calls, cost, timeouts = usage(store, args.run_id)
         killed = f" ({timeouts} timed out, cost unknown)" if timeouts else ""
         print(f"agentflow: {calls} Claude calls{killed}, ${cost:.4f} reported cost", file=sys.stderr)
