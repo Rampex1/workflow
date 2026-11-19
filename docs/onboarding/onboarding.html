@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>workflow onboarding guide</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  :root { --ink:#1d2330; --muted:#5b6475; --line:#d9dde5; --soft:#f4f6f9; --accent:#2f5bb7; --warn:#a4501a; }
+  * { box-sizing: border-box; }
+  body { font: 10.5pt/1.55 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); background:#fff; margin:0; }
+  h1 { font-size: 20pt; margin: 0 0 6pt; color: var(--accent); break-before: page; }
+  h1.first { break-before: auto; }
+  h2 { font-size: 13.5pt; margin: 16pt 0 4pt; border-bottom: 1px solid var(--line); padding-bottom: 2pt; break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 12pt 0 3pt; break-after: avoid; }
+  p, li { orphans: 3; widows: 3; }
+  code { font: 9pt/1.4 "SF Mono", Menlo, monospace; background: var(--soft); padding: 0 3px; border-radius: 3px; }
+  pre { font: 8.6pt/1.45 "SF Mono", Menlo, monospace; background: var(--soft); border: 1px solid var(--line); border-radius: 5px; padding: 7pt 9pt; white-space: pre-wrap; break-inside: avoid; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 6pt 0; font-size: 9.5pt; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 4pt 6pt; text-align: left; vertical-align: top; }
+  th { background: var(--soft); }
+  .box { border-left: 4px solid var(--accent); background: #eef3fc; padding: 6pt 10pt; margin: 8pt 0; break-inside: avoid; }
+  .warn { border-left-color: var(--warn); background: #fbf1ea; }
+  .mermaid svg { max-height: 175mm; max-width: 100%; }
+  .mermaid { text-align: center; margin: 8pt 0; break-inside: avoid; }
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover h1 { font-size: 30pt; break-before: auto; }
+  .cover .sub { font-size: 13pt; color: var(--muted); }
+  .toc li { margin: 2pt 0; }
+  .muted { color: var(--muted); }
+  details, summary { display: block; }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <h1 class="first">The <code>workflow</code> repository</h1>
+  <p class="sub">An onboarding guide that assumes no prior context.</p>
+  <p class="muted">Covers every tracked file as of commit <code>a2d7b54</code> (November 2026).<br>
+  Read it top to bottom. Each chapter only uses ideas introduced earlier.</p>
+  <div class="box">
+    <b>How to use this guide.</b> Chapters 1–2 give you the map and the background ideas.
+    Chapter 3 covers the terminal setup (<code>config/</code>). Chapters 4–11 build up
+    <code>agentflow/</code>, piece by piece, until you can read all of its source.
+    Chapter 12 has hands-on exercises, and Chapter 13 is a self-check quiz with answers.
+  </div>
+  <h2>Contents</h2>
+  <ol class="toc">
+    <li>What this repository is</li>
+    <li>Background ideas you need</li>
+    <li>Part A: the terminal setup (<code>config/</code>)</li>
+    <li>Part B: agentflow, the problem it solves</li>
+    <li>agentflow vocabulary</li>
+    <li>The big picture</li>
+    <li>The engine, line by line (<code>core.py</code>)</li>
+    <li>The Claude CLI (<code>__main__.py</code>)</li>
+    <li>Roles, skills and the learning loop</li>
+    <li>The irreversible-command guard</li>
+    <li>Examples and tests</li>
+    <li>Hands-on exercises</li>
+    <li>Self-check quiz, glossary and FAQ</li>
+  </ol>
+</section>
+
+<!-- ============================================================ -->
+<h1>1. What this repository is</h1>
+
+<p>The repository is a personal toolbox with two parts that have nothing to do with each other.
+You can learn either one without the other.</p>
+
+<table>
+<tr><th>Folder</th><th>What it is</th><th>Language</th></tr>
+<tr><td><code>config/</code></td><td>Dotfiles: the settings for a terminal setup made of Ghostty (the terminal app), tmux (splits a terminal into panes) and Neovim (the editor).</td><td>Lua, plain config files</td></tr>
+<tr><td><code>agentflow/</code></td><td>A small Python program that runs a set of AI tasks (calls to Claude) in the right order, automatically checks each result, and retries the ones that fail.</td><td>Python (standard library only)</td></tr>
+<tr><td><code>docs/</code></td><td>This guide. It isn't committed.</td><td>HTML</td></tr>
+</table>
+
+<h2>The file tree</h2>
+<pre>workflow/
+├── .gitignore                    ignores .DS_Store, .pytest_cache/, __pycache__/
+├── config/
+│   ├── README.md                 install steps and key bindings
+│   ├── ghostty/config            terminal: theme, font size, transparency
+│   ├── tmux/tmux.conf            tmux: prefix key, plugins, status bar
+│   └── nvim/                     Neovim, built on the LazyVim distribution
+│       ├── init.lua              entry point: loads config/lazy.lua
+│       ├── lazyvim.json          which LazyVim "extras" are on
+│       ├── lazy-lock.json        exact plugin versions (pinned)
+│       ├── stylua.toml           Lua formatter: 2-space indents
+│       └── lua/
+│           ├── config/lazy.lua       installs the plugin manager, loads plugins
+│           ├── config/options.lua    editor options
+│           ├── config/autocmds.lua   automatic behaviours
+│           └── plugins/*.lua         per-plugin overrides
+└── agentflow/
+    ├── README.md  CLAUDE.md  DIAGRAMS.md
+    ├── agentflow/                the Python package
+    │   ├── __init__.py           re-exports the public names
+    │   ├── core.py               the engine (~290 lines)
+    │   └── __main__.py           the command-line tool that calls Claude
+    ├── examples/
+    │   ├── demo.py               offline demo, no Claude needed
+    │   └── slugify/              real Claude example with hidden tests
+    ├── tests/                    pytest suite (70 tests)
+    └── .claude/                  Claude Code project settings
+        ├── agents/*.md           the five role prompts
+        ├── skills/*/SKILL.md     reusable instructions
+        ├── hooks/guard.py        blocks risky shell commands
+        ├── irreversible.json     the guard's rules
+        └── settings.json         registers the guard as a hook</pre>
+
+<p>Files that agentflow creates while running (<code>agentflow/.workflow/</code>: the
+database, lock files, lesson proposals) are git-ignored.</p>
+
+<!-- ============================================================ -->
+<h1>2. Background ideas you need</h1>
+
+<p>Skim the ones you already know. Everything later builds on these.</p>
+
+<h2>Large language model (LLM) and Claude</h2>
+<p>An LLM is a program that takes text in and produces text out. Claude is the LLM this repo uses.
+LLM output is <i>probabilistic</i>: ask twice and you may get two different answers, and some of them
+will be wrong. That one fact drives the whole design of agentflow. <b>Never trust an answer you haven't checked.</b></p>
+
+<h2>Claude Code and <code>claude -p</code></h2>
+<p>Claude Code is Anthropic's command-line program for working with Claude. Normally it's interactive.
+<code>claude -p</code> ("print mode") runs it once without a human: you send a prompt on standard input,
+and it prints the answer and exits. With <code>--output-format json</code> the answer comes wrapped in a
+JSON "envelope" that also reports cost (<code>total_cost_usd</code>) and errors (<code>is_error</code>).
+agentflow calls Claude this way, as a subprocess.</p>
+
+<h2>Agents, tools, hooks, skills</h2>
+<ul>
+  <li><b>Agent</b>: an LLM running in a loop that can take actions. In Claude Code, an agent can use <b>tools</b> (read files, run shell commands).</li>
+  <li><b>Hook</b>: a script Claude Code runs automatically at certain moments. A <code>PreToolUse</code> hook runs before a tool is used and can allow it, ask the human, or deny it.</li>
+  <li><b>Skill</b>: a Markdown file (<code>SKILL.md</code>) of instructions that Claude Code loads when relevant. It starts with "frontmatter", a block between two <code>---</code> lines holding a name and description.</li>
+  <li><b>Subagent definition</b>: a Markdown file in <code>.claude/agents/</code> describing a specialised role.</li>
+</ul>
+
+<h2>Graphs, DAGs and topological order</h2>
+<p>A <b>graph</b> is a set of nodes connected by arrows (edges). Here a node is a task, and an arrow
+A → B means "B needs A's output". A <b>DAG</b> (directed acyclic graph) is a graph with no loops:
+you can never follow arrows back to where you started. A <b>topological order</b> lists the nodes so
+every task comes after everything it depends on. Python's standard library has
+<code>graphlib.TopologicalSorter</code>, which computes this and detects cycles.</p>
+
+<div class="mermaid">
+flowchart LR
+  A[fetch sales] --> C[summarize]
+  B[fetch costs] --> C
+  C --> D[publish]
+</div>
+<p class="muted" style="text-align:center">A DAG. The two fetches don't depend on each other, so they can run at the same time.</p>
+
+<h2>asyncio</h2>
+<p>Python's built-in way to run many things at once in one thread. A function marked <code>async</code>
+can pause at <code>await</code> while waiting (for a network call, a subprocess, a timer) so others can run.
+<code>asyncio.Semaphore(n)</code> lets at most <i>n</i> things into a section at once.
+<code>asyncio.to_thread</code> runs an ordinary (blocking) function in a background thread so it doesn't freeze the others.</p>
+
+<h2>SQLite</h2>
+<p>A database stored in a single file, built into Python as <code>sqlite3</code>. agentflow saves all its
+state there, so a run can stop and later resume where it left off.</p>
+
+<h2>pytest</h2>
+<p>The standard Python test runner. A command like <code>python3 -m pytest</code> exits with code 0 when every test passes,
+and non-zero otherwise. agentflow uses that exit code as an automatic pass/fail check.</p>
+
+<!-- ============================================================ -->
+<h1>3. Part A: the terminal setup (<code>config/</code>)</h1>
+
+<p>Three programs nest inside each other, all using the same colour theme (Catppuccin Mocha):</p>
+
+<div class="mermaid">
+flowchart LR
+  G["Ghostty<br/>(the terminal window)"] --> T["tmux<br/>(panes, windows, sessions)"] --> N["Neovim + LazyVim<br/>(the editor)"]
+</div>
+
+<h2>Installing</h2>
+<p>Each folder is copied into <code>~/.config/</code>. From <code>config/README.md</code>:</p>
+<pre>xcode-select --install          # git and a C compiler (treesitter needs one)
+brew install neovim tmux node ripgrep fd lazygit
+brew install --cask ghostty
+git clone https://github.com/tmux-plugins/tpm ~/.config/tmux/plugins/tpm
+cp -R ghostty tmux nvim ~/.config/     # run inside config/</pre>
+<p>Then start tmux and press <code>C-s</code> then <code>I</code> to install tmux plugins. Open
+<code>nvim</code> once and it installs its plugins at the versions pinned in <code>lazy-lock.json</code>.
+The repo is a <i>copy</i> of the live files, not a symlink, so changes on your machine have to be copied
+back (the README gives an <code>rsync</code> command).</p>
+
+<h2>Ghostty (<code>ghostty/config</code>)</h2>
+<p>Catppuccin Mocha theme, font size 18, 90% opaque background with blur, the mouse cursor hides while
+you type, and the macOS Option key acts as Alt (so terminal shortcuts using Alt work). Reload with <code>cmd+shift+,</code>.</p>
+
+<h2>tmux (<code>tmux/tmux.conf</code>)</h2>
+<p>tmux splits one terminal into panes and keeps sessions alive. Every tmux command starts with a
+<b>prefix</b> key. Here it's <code>C-s</code> (Ctrl+S) instead of the default <code>C-b</code>.</p>
+<table>
+<tr><th>Setting</th><th>Effect</th></tr>
+<tr><td><code>prefix C-s</code></td><td>press Ctrl+S, then a command key</td></tr>
+<tr><td><code>mouse on</code></td><td>click panes, drag borders, scroll</td></tr>
+<tr><td><code>base-index 1</code>, <code>renumber-windows on</code></td><td>windows numbered from 1, with no gaps</td></tr>
+<tr><td><code>status-position top</code></td><td>status bar at the top, showing app, CPU, session, uptime, battery</td></tr>
+<tr><td><code>prefix r</code></td><td>reload the config</td></tr>
+<tr><td><code>prefix "</code> / <code>prefix %</code></td><td>split horizontally / vertically, keeping the current folder</td></tr>
+</table>
+<p>Plugins are managed by <b>TPM</b>: catppuccin theme (pinned to v2.1.3), cpu, battery, and vim-tmux-navigator.
+The <code>run '…/tpm'</code> line must stay last in the file.</p>
+
+<h2>Neovim (<code>nvim/</code>)</h2>
+<p><b>LazyVim</b> is a ready-made Neovim setup. <b>lazy.nvim</b> is the plugin manager underneath it.
+The flow at startup:</p>
+<ol>
+  <li><code>init.lua</code> runs <code>require("config.lazy")</code>.</li>
+  <li><code>lua/config/lazy.lua</code> downloads lazy.nvim if it's missing, then loads LazyVim's plugins plus everything in <code>lua/plugins/</code>.</li>
+  <li>LazyVim loads <code>options.lua</code> before plugins and <code>autocmds.lua</code> later.</li>
+</ol>
+<table>
+<tr><th>File</th><th>What it changes from LazyVim's defaults</th></tr>
+<tr><td><code>lazyvim.json</code></td><td>Extras on: mini-files (file browser), json, typescript, mini-animate</td></tr>
+<tr><td><code>options.lua</code></td><td>Project root = current folder; no relative line numbers; <code>softtabstop=-1</code> (follow <code>shiftwidth</code>)</td></tr>
+<tr><td><code>autocmds.lua</code></td><td>Pressing Enter in a comment doesn't start a new comment line</td></tr>
+<tr><td><code>plugins/noice.lua</code></td><td>Turns off the function-signature popup that appears when typing <code>(</code></td></tr>
+<tr><td><code>plugins/vim-tmux-navigator.lua</code></td><td><code>Ctrl+h/j/k/l</code> move between Neovim splits <i>and</i> tmux panes with the same keys</td></tr>
+<tr><td><code>stylua.toml</code></td><td>Lua formatting: spaces, width 2</td></tr>
+</table>
+<div class="box">vim-tmux-navigator is installed on <b>both</b> sides (a tmux plugin and a Neovim plugin).
+Each side checks whether the other should handle the key, which is what makes the movement seamless.</div>
+
+<!-- ============================================================ -->
+<h1>4. Part B: agentflow, the problem it solves</h1>
+
+<p>Suppose you ask Claude to write a function. It returns code that looks right. Is it right? You don't know
+until you test it. If it's wrong, you paste the error back and ask again. If the job has five steps,
+you do this five times, watching every step. That's "babysitting an agent".</p>
+
+<p>agentflow automates the babysitting with two ideas:</p>
+<table>
+<tr><th>Idea</th><th>What it does</th><th>Where it lives</th></tr>
+<tr><td><b>The loop</b></td><td>Produce → check → if it failed, send the error back and try again (up to 4 attempts in total).</td><td>Inside one task</td></tr>
+<tr><td><b>The graph</b></td><td>Decide which tasks exist, which can run at the same time, and which must wait for another's output.</td><td>Between tasks</td></tr>
+</table>
+
+<p>Plus three supporting ideas:</p>
+<ul>
+  <li><b>Persistence</b>: every change is saved to SQLite, so a crashed or interrupted run can be resumed.</li>
+  <li><b>A human gate</b>: tasks marked as risky ask a human before running. By default the answer is "no".</li>
+  <li><b>Learning</b>: when a task fails a check and then passes, the failure is saved. A human can turn recurring failures into permanent rules for future runs.</li>
+</ul>
+
+<div class="box warn"><b>Two kinds of worker.</b> The text roles (researcher, implementer, reviewer, planner) run with
+<b>all tools turned off</b>: text in, text out, stored in the database. The <b>coder</b> role, used by the <code>fix</code>
+command (Chapter 8.7), is the one exception. It can read and edit files, but only inside a throwaway copy of your
+repo, and its output is a diff that you review and apply yourself. No worker can browse the web, and none
+changes your actual checkout.</div>
+
+<!-- ============================================================ -->
+<h1>5. agentflow vocabulary</h1>
+
+<table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td><b>Task</b></td><td>One unit of work. Has an <code>id</code>, a <code>worker</code> name, a <code>spec</code> (instructions), <code>deps</code> (task ids whose output it needs), <code>checks</code> (names of check functions), <code>requires_approval</code>, and an optional <code>timeout</code> in seconds.</td></tr>
+<tr><td><b>Plan</b></td><td>A list of Tasks. It's just data. It can be written by hand as JSON or produced by the planner.</td></tr>
+<tr><td><b>Worker</b></td><td>A function that does a task: takes a <code>Context</code>, returns output. In the CLI every worker is a Claude call under some role.</td></tr>
+<tr><td><b>Check</b></td><td>A function <code>(task, output) → None or str</code>. <code>None</code> means pass. A string is the error, which is sent back to the worker.</td></tr>
+<tr><td><b>Context</b></td><td>What a worker receives: the task, <code>inputs</code> (dependency outputs), <code>feedback</code> (errors from earlier attempts), <code>lessons</code>, <code>attempt</code> number, and <code>meta</code> (a dict for reporting cost).</td></tr>
+<tr><td><b>Run</b></td><td>One execution of a plan, named by a run id like <code>report</code>. Its state lives in SQLite under that id.</td></tr>
+<tr><td><b>Approver</b></td><td>A function <code>(task) → bool</code> asked before a gated task runs. The default always returns <code>False</code>.</td></tr>
+<tr><td><b>Lesson</b></td><td>The first line of a check error that a task later fixed. Stored per worker type.</td></tr>
+<tr><td><b>Role</b></td><td>In the CLI, the worker names: <code>researcher</code>, <code>implementer</code>, <code>reviewer</code>, plus <code>planner</code> for planning. Each has a prompt in <code>.claude/agents/</code>.</td></tr>
+</table>
+
+<h2>Task statuses</h2>
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> pending
+  pending --> running: all deps done
+  pending --> skipped: a dep failed, skipped or rejected
+  running --> done: checks pass
+  running --> failed: 4 attempts used up
+  running --> rejected: approver said no
+</div>
+<p>If the process dies while a task is <code>running</code>, resuming sends a normal task back to <code>pending</code> and marks a gated task <code>failed</code> (Chapter 7.3).</p>
+<p><code>failed</code>, <code>skipped</code> and <code>rejected</code> are the <b>blocking</b> statuses: any task depending on one becomes <code>skipped</code>.</p>
+
+<!-- ============================================================ -->
+<h1>6. The big picture</h1>
+
+<div class="mermaid">
+flowchart TD
+    subgraph IN["Where tasks come from"]
+        OBJ["--objective 'Draft a design...'"] --> PLANNER["planner (one Claude call)"]
+        PLANFILE["--plan plan.json (hand-written)"]
+    end
+    PLANNER -->|"JSON list of tasks"| VALIDATE
+    PLANFILE --> VALIDATE
+    VALIDATE{"validate()<br/>no duplicate ids, cycles,<br/>unknown workers or checks"} -->|ok| ORCH
+    VALIDATE -->|bad| ERR["refuse to run"]
+    ORCH["Orchestrator<br/>runs tasks in dependency order,<br/>up to 4 at a time"] --> TASK["run one task"]
+    TASK --> ORCH
+    ORCH <--> DB[("SQLite runs.db<br/>tasks + events")]
+    DB --> STATUS["status / resume"]
+</div>
+
+<p>The code has two layers. Keep them separate in your head:</p>
+<table>
+<tr><th>Layer</th><th>File</th><th>Knows about Claude?</th><th>Job</th></tr>
+<tr><td><b>Engine</b></td><td><code>agentflow/core.py</code></td><td>No</td><td>Validate a plan, schedule tasks, retry, gate, persist, resume. Workers and checks are any Python functions you pass in.</td></tr>
+<tr><td><b>CLI</b></td><td><code>agentflow/__main__.py</code></td><td>Yes</td><td>Command-line tool. Plugs Claude-calling workers and three checks (<code>contains</code>, <code>command</code>, <code>diff_command</code>) into the engine. Adds the planner, the <code>fix</code> command, cost reporting and lesson review.</td></tr>
+</table>
+<p>You can use the engine from your own Python code with your own workers (see <code>examples/demo.py</code>) without ever calling Claude.</p>
+
+<!-- ============================================================ -->
+<h1>7. The engine, line by line (<code>core.py</code>)</h1>
+
+<h2>7.1 Data types</h2>
+<pre><code>@dataclass
+class Task:
+    id: str
+    worker: str                       # name in the worker registry
+    spec: dict = {}                   # instructions / params
+    deps: list[str] = []
+    checks: list[str] = []            # names in the check registry
+    requires_approval: bool = False
+    timeout: float | None = None      # seconds per attempt
+
+Worker = Callable[[Context], Any]            # sync or async
+Check  = Callable[[Task, Any], str | None]   # None = pass
+Approver = Callable[[Task], bool]</code></pre>
+<p>Workers and checks are referred to <b>by name</b>. That's why a plan can be plain JSON and a run can be
+resumed from the database alone: the database stores names, and the program supplies the functions.</p>
+
+<h2>7.2 <code>validate(tasks, workers, checks)</code></h2>
+<p>Runs before anything else and raises <code>PlanError</code> for duplicate ids, unknown worker,
+unknown check, unknown dependency, or a dependency cycle (found by <code>TopologicalSorter.prepare()</code>).
+A bad plan never starts.</p>
+
+<h2>7.3 <code>Store</code>: the SQLite layer</h2>
+<p>Two tables. The database is opened in autocommit mode, so every write is saved immediately.</p>
+<pre><code>tasks (run, id, def, status, attempts, output, feedback)   -- one row per task per run: CURRENT state
+events(run, ts, task, kind, data)                          -- append-only history</code></pre>
+<table>
+<tr><th>Event kind</th><th>Logged when</th></tr>
+<tr><td><code>run_start</code> / <code>run_end</code></td><td>A run begins or finishes (<code>run_end</code> includes every task's status)</td></tr>
+<tr><td><code>attempt</code></td><td>After each attempt: number, errors, and <code>meta</code> such as cost</td></tr>
+<tr><td><code>skipped</code></td><td>A task is skipped because a dependency blocked</td></tr>
+<tr><td><code>approval</code></td><td>The approver was asked, with its answer</td></tr>
+<tr><td><code>lesson</code></td><td>A task passed after failing; holds the worker name and the errors it fixed</td></tr>
+<tr><td><code>plan</code></td><td>(CLI) the planner call's cost</td></tr>
+<tr><td><code>reviewed</code></td><td>(CLI) a human approved or rejected lessons, logged under the pseudo run <code>_lessons</code></td></tr>
+</table>
+<p>Important methods:</p>
+<ul>
+  <li><code>init(run, tasks)</code>: inserts any new tasks as <code>pending</code> (existing rows are left alone, using <code>INSERT OR IGNORE</code>). It also handles <b>crash recovery</b>: any task still marked <code>running</code> must have been interrupted. A normal task goes back to <code>pending</code> with the note "Interrupted attempt." A gated task becomes <code>failed</code>, because it may have done something irreversible that a human must reconcile first.</li>
+  <li><code>load</code> / <code>save</code> / <code>log</code> / <code>events</code>: read and write rows.</li>
+  <li><code>lock_run(run)</code>: makes sure only one process works on a run at a time. It uses an in-memory set plus an OS file lock (<code>fcntl.flock</code>) on <code>&lt;db&gt;.&lt;sha256 of run id&gt;.lock</code>.</li>
+  <li><code>lesson_counts()</code>: for each worker, each lesson's first line (max 300 characters) and how many tasks hit it, newest first. <code>lessons(worker)</code> returns the top 20.</li>
+</ul>
+
+<h2>7.4 <code>Orchestrator.run</code>: the scheduler</h2>
+<pre><code>Orchestrator(workers, checks, store, approver, max_corrections=3, concurrency=4)
+await orch.run(run_id, tasks)   # start a run
+await orch.run(run_id)          # resume it from the database</code></pre>
+<p>The steps:</p>
+<ol>
+  <li>Take the run lock. If tasks were given, validate them and <code>init</code> them. Then load the state from the database and validate it again (the database is the source of truth).</li>
+  <li>Compute a topological order once.</li>
+  <li><b>Loop</b>: walk the tasks in that order. For each <code>pending</code> task that isn't already running:
+    <ul>
+      <li>if any dependency is blocking (failed, skipped, rejected), mark it <code>skipped</code>. Because the walk follows topological order, skips spread down the graph in a single pass;</li>
+      <li>else if every dependency is <code>done</code>, start it as an asyncio task (<code>_execute</code>);</li>
+      <li>otherwise leave it waiting.</li>
+    </ul>
+    If nothing is running, stop. Otherwise wait until <i>any one</i> running task finishes (<code>FIRST_COMPLETED</code>), then walk again.</li>
+  <li>In a <code>finally</code> block, cancel anything still running. Log <code>run_end</code> and return the state.</li>
+</ol>
+
+<h2>7.5 <code>_execute</code>: the loop inside one task</h2>
+<div class="mermaid">
+flowchart TD
+    START(["task is pending"]) --> DEPS{"did all its deps finish?"}
+    DEPS -->|"a dep failed or was skipped"| SKIP(["skipped"])
+    DEPS -->|yes| GATE{"requires_approval?"}
+    GATE -->|"yes: ask approver"| REJ(["rejected"])
+    GATE -->|"no, or approved"| CALL
+    CALL["call the worker with Context:<br/>spec + dep outputs + past errors + lessons"] --> CHECK
+    CHECK{"run every check"} --> PASS{"all pass?"}
+    PASS -->|yes| DONE(["done: output saved"])
+    PASS -->|"no: errors become feedback"| TRIES{"fewer than 4 attempts?"}
+    TRIES -->|yes| GATE
+    TRIES -->|no| FAIL(["failed: dependents get skipped"])
+</div>
+<p>Details worth knowing:</p>
+<ul>
+  <li>It waits on the semaphore first, so at most <code>concurrency</code> tasks run at once.</li>
+  <li>It loops while <code>attempts &lt;= max_corrections</code>: 1 attempt plus 3 corrections, so <b>4 attempts at most</b>. The attempt count is saved, so resume continues within the remaining budget.</li>
+  <li><b>Approval is asked on every attempt</b>, before the worker runs. A "no" makes the task <code>rejected</code>.</li>
+  <li>A worker exception or timeout doesn't crash the run. It becomes the error <code>"worker error: TypeName: message"</code> and counts as a failed attempt.</li>
+  <li>On success, the earlier feedback (minus <code>worker error:</code> and <code>Interrupted attempt</code> lines, which are infrastructure problems, not lessons) is logged as a <code>lesson</code>.</li>
+  <li><b>Only this task is retried.</b> Finished tasks keep their output, and independent branches keep going.</li>
+</ul>
+
+<h2>7.6 Calling workers: <code>_call</code> and <code>_call_sync</code></h2>
+<p>Async workers are awaited directly with <code>asyncio.wait_for(..., timeout)</code>. Sync workers, such as the CLI's
+subprocess call to Claude, run in a thread via <code>asyncio.to_thread</code> so they don't block other tasks.</p>
+<div class="box warn">Python can't kill a thread. If a sync worker times out, the engine still waits for the thread
+to actually finish before retrying. That's what the <code>asyncio.shield</code> + <code>gather</code> code is for. Otherwise
+a slow old attempt could overlap with the retry. So blocking workers should set their own deadlines,
+as the CLI does with <code>subprocess.run(timeout=...)</code>.</div>
+
+<h2>7.7 <code>_verify</code>: running checks</h2>
+<p>First, the output must be JSON-serializable, because it has to be stored in SQLite. Then every check named in the task runs.
+A check that raises becomes an error string, not a crash. Each error is prefixed with the check's name, e.g.
+<code>has_keys: missing keys ['cost']</code>. The returned list is empty when everything passed.</p>
+
+<!-- ============================================================ -->
+<h1>8. The Claude CLI (<code>__main__.py</code>)</h1>
+
+<h2>8.1 Commands</h2>
+<p>Run from inside <code>agentflow/</code>. Global flags come <b>before</b> the command.</p>
+<pre>python3 -m agentflow [--db .workflow/runs.db] [--jobs 4] [--skills .claude/skills]
+                     [--effort medium] [--max-output-tokens 8000]  COMMAND
+
+  run NAME --objective "text" [--constraints-from FILE]   Claude plans, then runs
+  run NAME --plan FILE                                    run a hand-written plan
+  fix NAME --issue "text" --check "cmd" [--repo DIR]      fix a bug in a git repo; result is a patch
+          [--readonly PATHSPEC ...]
+  resume NAME                                             continue an interrupted run
+  status NAME                                             print state, run nothing
+  lessons [--propose [--min-count 2] | --approve ROLE | --reject ROLE]</pre>
+<p>Output: the final state of each task as JSON on stdout, and on stderr a line like
+<code>agentflow: 4 Claude calls, $0.1200 reported cost</code>. <code>run</code> and <code>resume</code> exit with code 1 if any task didn't finish <code>done</code>.</p>
+
+<h2>8.2 <code>--objective</code> vs <code>--plan</code></h2>
+<table>
+<tr><th></th><th><code>--objective</code></th><th><code>--plan</code></th></tr>
+<tr><td>Who writes the task list</td><td>Claude (the planner role)</td><td>A JSON file</td></tr>
+<tr><td>Extra Claude call</td><td>Yes</td><td>No</td></tr>
+<tr><td>Same tasks every run</td><td>No</td><td>Yes</td></tr>
+<tr><td>Checks available</td><td><code>contains</code> only</td><td><code>contains</code> and <code>command</code> (run real tests)</td></tr>
+<tr><td>Good for</td><td>Open-ended writing ("draft a design")</td><td>Work with a known shape and a test ("write slugify; pytest must pass")</td></tr>
+</table>
+<p>Planner-generated tasks never get the <code>command</code> check. That's deliberate: a model should never choose what code gets executed on your machine.</p>
+
+<h2>8.3 <code>claude(role, payload, ...)</code>: one Claude call</h2>
+<pre><code>claude -p --tools "" --setting-sources project --output-format json \
+       --no-session-persistence --effort medium
+# stdin  = body of .claude/agents/&lt;role&gt;.md + "\n\n" + JSON payload
+# env    = CLAUDE_CODE_MAX_OUTPUT_TOKENS=8000
+# timeout = task.timeout or 180 seconds</code></pre>
+<ul>
+  <li><code>--tools ""</code> turns off every tool, so the call is text in, text out.</li>
+  <li>Effort and the output cap stop runaway answers. The README records one call at the default effort producing 76,897 tokens and costing $1.56 for a 1.4 KB answer.</li>
+  <li>It counts calls in <code>meta</code> <i>before</i> calling, records cost even when the call fails, and counts timeouts separately (a killed call reports no cost, so the total is then a lower bound).</li>
+  <li>It raises an error if the envelope can't be parsed, the exit code is non-zero, <code>is_error</code> is set, or <code>result</code> isn't a string. The engine turns that into a failed attempt.</li>
+</ul>
+
+<h2>8.4 <code>work(opts, ctx)</code>: the worker for every role</h2>
+<p>All three roles share one worker function. It sends this payload:</p>
+<pre><code>{"task": spec, "dependencies": {dep_id: output}, "failure": [errors so far],
+ "constraints": "&lt;approved skill text for this role&gt;", "attempt": n}</code></pre>
+<p>The task's <code>spec.effort</code>, if set, overrides <code>--effort</code>.</p>
+
+<h2>8.5 The two checks</h2>
+<table>
+<tr><th>Check</th><th>Spec fields</th><th>Passes when</th></tr>
+<tr><td><code>contains</code></td><td><code>contains: [str, ...]</code></td><td>Every string appears in the output</td></tr>
+<tr><td><code>command</code></td><td><code>output_file</code>, <code>command: [argv]</code>, optional <code>fixtures</code>, <code>command_timeout</code> (default 120)</td><td>The command exits 0</td></tr>
+</table>
+<p>How <code>command</code> works: it makes a fresh temporary folder, copies <code>fixtures/</code> into it
+(for example a pytest file), writes the output to <code>output_file</code> (removing one surrounding Markdown
+code fence first), replaces <code>{python}</code> in the command with the current interpreter, and runs it.
+It refuses an <code>output_file</code> that would land outside the temp folder. On failure, the first line of the
+error is pytest's <code>FAILED</code>/<code>ERROR</code> lines (or the last output line), followed by the last 3000 characters of the log.
+That first line becomes the lesson.</p>
+<div class="box warn">The command runs model-written code <b>without a sandbox</b>. Only use plans you wrote yourself, or run inside a container.</div>
+<p><code>prepare()</code> checks <code>command</code> specs up front and turns <code>fixtures</code> into an absolute path relative to the plan file, so <code>resume</code> works from any folder.</p>
+
+<h2>8.6 <code>plan(objective, constraints)</code>: the planner</h2>
+<p>Calls the <code>planner</code> role, which must return a raw JSON array. Each row becomes a Task:</p>
+<pre><code>{"id": "draft-design", "role": "implementer", "brief": "...",
+ "depends_on": ["research"], "contains": ["## Risks"], "risk": "contained|wide|irreversible"}
+  →  Task(id, worker=role, spec={brief, contains}, deps=depends_on,
+          checks=["contains"], requires_approval = (risk == "irreversible"))</code></pre>
+<p>The planner's constraints are the strings from <code>--constraints-from</code> plus every approved
+<code>*-constraints</code> skill, so learned rules shape how the work is split.</p>
+<p><b>Approval in the CLI:</b> the CLI uses the engine's default approver, which always says no. Any
+<code>irreversible</code> task is therefore <code>rejected</code> and its dependents are <code>skipped</code>. A human-in-the-loop
+approval flow exists only in the Python API (<code>cli_approver</code>).</p>
+
+<h2>8.7 Fixing an issue: <code>fix</code> and the coder worker</h2>
+<p>This is the one command that changes code in a real repository. You describe the bug and give a command that
+fails now and should pass once it's fixed:</p>
+<pre>python3 -m agentflow fix bug-123 --repo ~/work/app \
+  --issue "average() adds 1 to the result" \
+  --check "python -m pytest -q tests/test_stats.py" --readonly tests/
+# → .workflow/bug-123-fix.patch   then: git -C ~/work/app apply &lt;patch&gt;</pre>
+<div class="mermaid">
+flowchart TD
+    I["fix NAME --repo --issue --check --readonly"] --> PIN["pin the repo's current commit"]
+    PIN --> PRE{"run the check<br/>on that commit"}
+    PRE -->|passes| REF(["refused: the check<br/>can't detect the issue"])
+    PRE -->|"fails (expected)"| W["fresh git worktree:<br/>Claude reads and edits files,<br/>may run only the check"]
+    W --> D["output = the staged diff"]
+    D --> C["diff_command, in another fresh worktree:<br/>apply the diff, refuse read-only edits,<br/>run the check"]
+    C --> OK{"passed?"}
+    OK -->|yes| P(["patch file:<br/>you review, then git apply"])
+    OK -->|"no: output fed back"| T{"fewer than 4 attempts?"}
+    T -->|yes| W
+    T -->|no| F(["failed"])
+</div>
+<ul>
+  <li><b>Gate first.</b> <code>pin_repo</code> records the repo's current commit (<code>spec.base</code>), then runs the check on it once,
+  before any Claude call. If the check already passes, it can't detect the bug, so the run is refused. If it fails, the first line is
+  printed (stop there if it's a setup problem such as a missing module) and the full output becomes <code>spec.failing_check</code>, Claude's
+  starting evidence.</li>
+  <li><b>Worktrees.</b> <code>git worktree add</code> makes an extra checkout of a commit in another folder, sharing the same <code>.git</code>.
+  The <code>worktree()</code> helper makes one in a temp folder and always removes it afterwards. Every attempt and every check gets its own,
+  so a failed attempt leaves nothing behind and retries start clean.</li>
+  <li><b>The coder call</b> (<code>code()</code>) runs <code>claude -p</code> inside the worktree with
+  <code>--tools Read,Edit,Write,Glob,Grep,Bash --restricted --permission-mode dontAsk</code> and allows Bash only for the exact
+  check command. <code>--restricted</code> ignores the target repo's Claude settings and hooks and keeps file tools inside the worktree.
+  <code>dontAsk</code> refuses anything not allowed, since nobody is there to answer. The default time limit is 900 seconds.</li>
+  <li><b>The output is a diff:</b> <code>git add -A</code> (excluding clutter like <code>__pycache__/</code> and <code>node_modules/</code>), then
+  <code>git diff --cached --binary</code>. It's plain text, so storage, resume and lessons work unchanged.</li>
+  <li><b>The <code>diff_command</code> check</b> fails an empty diff, applies the diff to <i>another</i> fresh worktree, fails if it touches a
+  <code>--readonly</code> path (so Claude can't "fix" a bug by editing the tests), then runs the check. A failure is fed back as usual.</li>
+  <li><b>Result:</b> for every finished coder task, the CLI writes <code>&lt;run&gt;-&lt;task&gt;.patch</code> next to the database and prints the
+  <code>git apply</code> command. Your checkout is never touched, and uncommitted changes in it aren't included.</li>
+  <li><b>Limits:</b> the planner can't assign <code>coder</code> tasks (only humans pick what edits code). In a hand-written plan, every coder task
+  starts from the same base commit, so a dependency's diff arrives as text, not applied. The check runs model-written code without a sandbox.</li>
+</ul>
+<p>Recorded run (November 2026): a one-line bug in a toy repo was fixed in 1 call, 10 seconds, $0.04.</p>
+
+<!-- ============================================================ -->
+<h1>9. Roles, skills and the learning loop</h1>
+
+<h2>9.1 Roles (<code>.claude/agents/*.md</code>)</h2>
+<table>
+<tr><th>Role</th><th>Job (summary of its prompt)</th></tr>
+<tr><td><code>planner</code></td><td>Turn an objective into a JSON array of tasks with real data dependencies only, literal <code>contains</code> markers, and a risk level. Don't do the tasks.</td></tr>
+<tr><td><code>researcher</code></td><td>Synthesise the evidence supplied, cite it, name unknowns.</td></tr>
+<tr><td><code>implementer</code></td><td>Produce exactly the requested artifact. On a correction, fix the reported failure and keep valid content.</td></tr>
+<tr><td><code>reviewer</code></td><td>Evaluate or integrate other tasks' outputs, citing concrete evidence.</td></tr>
+<tr><td><code>coder</code></td><td>Make the smallest change that fixes the issue in a disposable checkout. Don't touch tests or read-only paths. Run only the check. Finish with a short summary.</td></tr>
+</table>
+<p>The CLI sends only the body after the frontmatter. Fields like <code>tools: Read, Glob, Grep</code> matter only when the same
+files are used as subagents in an interactive Claude Code session.</p>
+
+<h2>9.2 Skills (<code>.claude/skills/</code>)</h2>
+<p><code>plan-project</code>, <code>execute-task</code> and <code>verify-work</code> are short instruction files for <i>interactive</i>
+Claude Code sessions in this folder. The CLI doesn't use them. Approved lessons are also installed here, as
+<code>&lt;role&gt;-constraints/SKILL.md</code>.</p>
+
+<h2>9.3 The learning loop</h2>
+<div class="mermaid">
+flowchart LR
+    A["task fails a check,<br/>then passes on a retry"] --> L["first line of the error<br/>saved as a lesson for that role"]
+    L --> P["lessons --propose<br/>(lessons seen in 2+ tasks)"]
+    P --> H["a human rewrites it<br/>as a general rule"]
+    H -->|"--approve"| S[".claude/skills/role-constraints/SKILL.md"]
+    H -->|"--reject"| X["thrown away"]
+    S --> PL["planner (on --objective runs)"]
+    S --> W["workers of that role"]
+</div>
+<ol>
+  <li><code>lessons</code> lists unreviewed lessons per role with counts.</li>
+  <li><code>lessons --propose</code> writes a draft to <code>.workflow/proposals/&lt;role&gt;-constraints/SKILL.md</code> (plus <code>lessons.json</code>) for lessons seen in at least <code>--min-count</code> tasks. If a skill already exists, the draft starts from it.</li>
+  <li>A human edits the draft, rewriting raw errors like <code>command: exited 1: FAILED test_max_50_chars…</code> into general rules like "URL slugs are at most 50 characters."</li>
+  <li><code>--approve ROLE</code> copies it into <code>.claude/skills/</code>. <code>--reject ROLE</code> discards it. Either way the lessons are marked reviewed and won't be proposed again.</li>
+</ol>
+<div class="box"><b>Why a human in the middle?</b> Raw check output is specific to one task and would mislead unrelated tasks.
+So raw lessons are <b>never</b> sent to Claude. Only reviewed rules are, with HTML comments and frontmatter stripped.</div>
+
+<!-- ============================================================ -->
+<h1>10. The irreversible-command guard</h1>
+
+<p>This is <b>separate from the engine</b>. It protects <i>you</i> when you use Claude Code interactively in <code>agentflow/</code>.</p>
+<ul>
+  <li><code>.claude/settings.json</code> registers <code>guard.py</code> as a <code>PreToolUse</code> hook on the Bash tool.</li>
+  <li><code>guard.py</code> reads the proposed command and checks it against the regexes in <code>irreversible.json</code>. <b>The first match wins.</b></li>
+  <li>A match prints a decision: <code>deny</code> (blocked) or <code>ask</code> (Claude Code asks you). No match prints nothing, so the command runs normally.</li>
+  <li>If the rules file is broken, the guard answers <code>ask</code> for every command. It never silently lets everything through.</li>
+</ul>
+<table>
+<tr><th>Decision</th><th>Matches</th></tr>
+<tr><td>deny</td><td>recursive <code>rm</code> of <code>/</code>, <code>~</code> or <code>$HOME</code></td></tr>
+<tr><td>ask</td><td>recursive <code>rm</code>; <code>git push</code>; <code>git reset --hard</code>, <code>clean -f</code>, <code>restore</code>; branch/tag deletion, history rewrites; package publishing; terraform/kubectl/helm changes; deploy scripts; <code>DROP</code>/<code>TRUNCATE TABLE</code></td></tr>
+</table>
+<div class="box warn">It matches raw text, so it's a guard against honest mistakes, <b>not a security boundary</b>. Clever quoting can get past it,
+and it also fires on harmless text like <code>echo "git push"</code>. In headless <code>claude -p</code>, nobody can answer "ask", so it acts as a denial.</div>
+
+<!-- ============================================================ -->
+<h1>11. Examples and tests</h1>
+
+<h2>11.1 <code>examples/demo.py</code> (offline, free)</h2>
+<p>Uses the engine with plain Python workers that pretend to be LLMs. The plan is the DAG from Chapter 2:
+two fetches → summarize → publish (gated). The summarize worker deliberately gets it wrong on attempt 1
+(no <code>cost</code> key, profit = sales + costs), and two checks catch it. Real output:</p>
+<pre>  [human] approving 'publish'
+  +0.00s  -            run_start
+  +0.20s  fetch_costs  attempt   {'n': 1, 'errors': []}
+  +0.21s  fetch_sales  attempt   {'n': 1, 'errors': []}          ← both fetches overlapped
+  +0.22s  summarize    attempt   {'n': 1, 'errors': ["has_keys: missing keys ['cost']",
+                                   'profit_consistent: profit 450 != revenue - cost']}
+  +0.22s  summarize    attempt   {'n': 2, 'errors': []}          ← fixed using the feedback
+  +0.22s  summarize    lesson    {...}                           ← failure recorded as a lesson
+  +0.23s  publish      approval  True
+  +0.23s  publish      attempt   {'n': 1, 'errors': []}
+  +0.23s  -            run_end   {all four: 'done'}</pre>
+
+<h2>11.2 <code>examples/slugify/</code> (real Claude)</h2>
+<div class="mermaid">
+flowchart LR
+    S["slugify (implementer)<br/>check: command = pytest"] -->|output passed in| U["usage-note (reviewer)<br/>check: contains 'slugify('"]
+</div>
+<p><code>plan.json</code> asks for a <code>slugify(text)</code> function. The hidden test in <code>fixtures/test_slugify.py</code>
+also requires slugs to be at most 50 characters and cut at a word boundary, which the brief never mentions. So attempt 1 usually fails,
+pytest's output is fed back, and a later attempt passes. The README's recorded run: 4 calls, $0.12. After the
+lesson was approved as a skill, later runs passed first time with 2 calls (about $0.06).</p>
+
+<h2>11.3 The test suite (70 tests)</h2>
+<table>
+<tr><th>File</th><th>Covers</th></tr>
+<tr><td><code>test_engine.py</code></td><td>Every engine guarantee: validation, concurrency and its limit, dependency inputs, correction with feedback, the 4-attempt budget, skip propagation, exceptions/timeouts as failures, approval, resume after a crash, locking, lessons</td></tr>
+<tr><td><code>test_checks.py</code></td><td>The <code>command</code> check (pass, fail, fence stripping, path escape), <code>prepare</code>, and CLI runs with a fake <code>claude</code>: cost, effort, timeouts, crashes</td></tr>
+<tr><td><code>test_cli.py</code></td><td>The full <code>--objective</code> flow with a fake planner; <code>status</code> and <code>resume</code></td></tr>
+<tr><td><code>test_lessons.py</code></td><td>propose → edit → approve → constraints reach workers and the planner; reject</td></tr>
+<tr><td><code>test_guard.py</code></td><td>Guard rules, silence on ordinary commands, a broken rules file, the hook protocol</td></tr>
+<tr><td><code>test_coder.py</code></td><td><code>fix</code> with a fake Claude: a check that already passes is refused; editing a read-only test is rejected and retried; clutter is excluded; the patch applies; the real repo and its worktree list are unchanged</td></tr>
+</table>
+<p>The CLI tests never call the real Claude. They put a small fake <code>claude</code> script first on <code>PATH</code> that reads the
+payload and replies with canned JSON. That makes the tests free, fast and deterministic.</p>
+
+<!-- ============================================================ -->
+<h1>12. Hands-on exercises</h1>
+<p>Do these in order. Each takes a few minutes. Exercises 1–4 cost nothing; 5–7 call Claude and cost a few cents.</p>
+
+<h2>1. Run the tests</h2>
+<pre>cd agentflow
+PYTHONPATH=. python3 -m pytest -q tests        # expect: 70 passed</pre>
+<p class="muted">The README says <code>python3 -m pytest -q tests</code>. On some machines that can't find the package; <code>PYTHONPATH=.</code> fixes it. If <code>python3</code> says <code>No module named pytest</code>, it points at a Python without pytest; use the version that has it (e.g. <code>python3.14</code>) or install pytest.</p>
+
+<h2>2. Run the demo and read the event log</h2>
+<pre>python3 examples/demo.py</pre>
+<p>Find in the output: the two fetches overlapping, summarize's failed attempt, the lesson, and the approval.</p>
+
+<h2>3. Break the demo on purpose</h2>
+<p>In <code>demo.py</code>, change <code>approve</code> to return <code>False</code>. Predict the final statuses, then run it.
+(Answer: publish is <code>rejected</code>; the others are <code>done</code>.) Then make <code>summarize</code> always return the wrong answer: it should
+be <code>failed</code> after 4 attempts, and publish <code>skipped</code>.</p>
+
+<h2>4. Look inside the database</h2>
+<p>Write a tiny script with <code>Store("x.db")</code> and the demo's plan, then:</p>
+<pre>sqlite3 x.db "select id, status, attempts from tasks;"
+sqlite3 x.db "select task, kind, data from events;"</pre>
+
+<h2>5. Run the slugify example (needs Claude Code logged in)</h2>
+<pre>python3 -m agentflow run slug1 --plan examples/slugify/plan.json
+python3 -m agentflow status slug1
+python3 -m agentflow lessons</pre>
+
+<h2>6. Plan from an objective</h2>
+<pre>python3 -m agentflow run notes --objective "Write a one-page guide to Python virtualenvs"</pre>
+<p>Read the tasks the planner created in the output. Which had dependencies? Which checks?</p>
+
+<h2>7. Fix a planted bug</h2>
+<pre>mkdir -p /tmp/toy &amp;&amp; cd /tmp/toy &amp;&amp; git init -q
+printf 'def average(xs):\n    return sum(xs) / len(xs) + 1\n' &gt; calc.py
+printf 'from calc import average\n\ndef test_average():\n    assert average([2, 4]) == 3\n' &gt; test_calc.py
+git add . &amp;&amp; git commit -qm init &amp;&amp; cd -
+python3 -m agentflow fix toy --repo /tmp/toy --issue "average() is wrong" \
+  --check "python3 -m pytest -q" --readonly test_calc.py</pre>
+<p>Read the stderr lines: the pre-check failure, the patch path, the cost. Open the <code>.patch</code> file and apply it.
+Then try <code>--readonly calc.py</code> instead: every attempt should fail, because the fix needs that file.</p>
+
+<h2>8. Try the config (optional)</h2>
+<p>Install per Chapter 3. In tmux, split with <code>C-s %</code>, open <code>nvim</code> in one pane, and move between panes with <code>Ctrl+h/l</code>.</p>
+
+<!-- ============================================================ -->
+<h1>13. Self-check quiz, glossary and FAQ</h1>
+
+<h2>Quiz</h2>
+<p>Answer each one before reading the answer.</p>
+<ol>
+  <li>What's the maximum number of times one task's worker can run in a run?<br>
+    <span class="muted"><i>Four: 1 attempt plus <code>max_corrections</code> (3).</i></span></li>
+  <li>Task B depends on A. A fails. C depends on nothing. What happens to B and C?<br>
+    <span class="muted"><i>B is skipped. C still runs and can finish.</i></span></li>
+  <li>Why does the engine refer to workers by name instead of storing the functions?<br>
+    <span class="muted"><i>So plans are plain data (JSON) and a run can be resumed from the database, with the program supplying the functions.</i></span></li>
+  <li>The process crashes while a normal task and a gated task are running. What happens on resume?<br>
+    <span class="muted"><i>The normal task goes back to pending (with "Interrupted attempt.") and retries within its remaining budget. The gated task becomes failed so a human can reconcile any side effects.</i></span></li>
+  <li>Why can't the planner produce a <code>command</code> check?<br>
+    <span class="muted"><i>So a model never chooses what gets executed. <code>command</code> runs unsandboxed, so only hand-written plans may use it.</i></span></li>
+  <li>Can an agentflow worker edit files in your repository?<br>
+    <span class="muted"><i>The text roles can't: their tools are off. The coder (<code>fix</code>) edits only a throwaway worktree and returns a diff. Your checkout changes only when you <code>git apply</code> the patch.</i></span></li>
+  <li>Why does <code>fix</code> run your check before calling Claude?<br>
+    <span class="muted"><i>A check that already passes can't tell whether the bug is fixed, so the run is refused. A failing check's output is shown to you (to catch setup problems) and given to Claude as evidence.</i></span></li>
+  <li>When is a lesson recorded, and when does it reach Claude?<br>
+    <span class="muted"><i>Recorded when a task passes after failing a check (crashes and timeouts don't count). It reaches Claude only after a human proposes, rewrites and approves it as a skill.</i></span></li>
+  <li>An <code>--objective</code> run's planner marks a task <code>irreversible</code>. What happens?<br>
+    <span class="muted"><i>It becomes a gated task. The CLI's approver always says no, so it's rejected and its dependents are skipped.</i></span></li>
+  <li>What does the guard hook do in an agentflow run?<br>
+    <span class="muted"><i>Nothing. Text workers have no tools, and the coder runs with <code>--restricted</code>, which ignores project settings and hooks. Its Bash is limited to the check command instead. The hook only protects interactive Claude Code sessions in this folder.</i></span></li>
+  <li>In tmux, what's the prefix key, and what do <code>Ctrl+h/j/k/l</code> do?<br>
+    <span class="muted"><i><code>C-s</code>. They move between tmux panes and Neovim splits (vim-tmux-navigator).</i></span></li>
+</ol>
+
+<h2>Glossary</h2>
+<table>
+<tr><td><b>DAG</b></td><td>A graph of tasks with no cycles</td></tr>
+<tr><td><b>Topological order</b></td><td>An ordering where each task comes after its dependencies</td></tr>
+<tr><td><b>Blocking status</b></td><td>failed, skipped or rejected: makes dependents skip</td></tr>
+<tr><td><b>Correction</b></td><td>A retry that receives the earlier errors as <code>feedback</code></td></tr>
+<tr><td><b>Gate</b></td><td>The approver call before a <code>requires_approval</code> task</td></tr>
+<tr><td><b>Envelope</b></td><td>The JSON wrapper <code>claude -p --output-format json</code> prints</td></tr>
+<tr><td><b>Fixtures</b></td><td>Files copied next to the output before a <code>command</code> check runs (e.g. tests)</td></tr>
+<tr><td><b>Lesson / constraint</b></td><td>A raw fixed failure / a human-approved rule derived from lessons</td></tr>
+<tr><td><b>Hook</b></td><td>A script Claude Code runs automatically (here: before Bash commands)</td></tr>
+<tr><td><b>Prefix (tmux)</b></td><td>The key pressed before a tmux command (<code>C-s</code>)</td></tr>
+<tr><td><b>LazyVim / lazy.nvim</b></td><td>A Neovim distribution / its plugin manager</td></tr>
+</table>
+
+<h2>FAQ</h2>
+<p><b>Do I need tests before using <code>--plan</code> with <code>command</code>?</b> Yes. The test file must already be in <code>fixtures/</code>. An earlier task's output can't become a fixture, and tests written by the same model would only check its own assumptions.</p>
+<p><b>When should I use <code>fix</code>?</b> When a bug can be shown by a command that fails now and should pass once it's fixed: a failing test, or a small script that reproduces it. Write that first. Without one, use Claude Code directly.</p>
+<p><b>When should I not use agentflow?</b> Mechanical edits (renames: use your editor), anything that needs the internet, and one-off questions.</p>
+<p><b>Why not a framework like LangGraph?</b> The engine is a few hundred lines of standard-library asyncio. A framework would duplicate the scheduling and checkpointing and add a heavy dependency (see the README's "Design review").</p>
+<p><b>Where do I go next?</b> <code>agentflow/README.md</code> (reference), <code>agentflow/DIAGRAMS.md</code> (diagrams on GitHub), then read <code>core.py</code> top to bottom. With this guide it should read easily.</p>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: false, theme: "neutral", flowchart: { useMaxWidth: true }, securityLevel: "loose" });
+  mermaid.run({ querySelector: ".mermaid" }).then(() => { document.body.dataset.ready = "1"; });
+</script>
+</body>
+</html>

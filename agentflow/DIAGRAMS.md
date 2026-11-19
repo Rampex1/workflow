@@ -61,6 +61,26 @@ flowchart LR
     W --> C
 ```
 
+## 4. Fixing an issue in a codebase (`fix`)
+
+```mermaid
+flowchart TD
+    I["fix NAME --repo --issue --check --readonly"] --> PIN["pin the repo's current commit"]
+    PIN --> PRE{"run the check<br/>on that commit"}
+    PRE -->|passes| REF(["refused: the check<br/>can't detect the issue"])
+    PRE -->|"fails (expected)"| W["fresh git worktree:<br/>Claude reads and edits files,<br/>may run only the check"]
+    W --> D["output = the staged diff"]
+    D --> C["diff_command, in another fresh worktree:<br/>apply the diff, refuse read-only edits,<br/>run the check"]
+    C --> OK{"passed?"}
+    OK -->|yes| P(["patch file:<br/>you review, then git apply"])
+    OK -->|"no: output fed back"| T{"fewer than 4 attempts?"}
+    T -->|yes| W
+    T -->|no| F(["failed"])
+```
+
+Your checkout is never modified. Every attempt and every check uses its own
+throwaway worktree, so a failed attempt leaves nothing behind.
+
 ## Example: `examples/slugify/plan.json`
 
 ```mermaid
@@ -77,4 +97,6 @@ flowchart LR
 
 The irreversible-command hook (`.claude/hooks/guard.py`) isn't part of the
 engine. It's a separate safety net for interactive Claude Code sessions in this
-folder. The engine's Claude calls run with all tools turned off.
+folder. The text roles' Claude calls run with all tools turned off. The `fix`
+coder runs with `--restricted`, which ignores project hooks, and its Bash is
+limited to the check command.
