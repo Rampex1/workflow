@@ -55,7 +55,10 @@ flowchart LR
     P --> H["a human rewrites it<br/>as a general rule"]
     H -->|"--approve"| S[".claude/skills/role-constraints/SKILL.md"]
     H -->|"--reject"| X["thrown away"]
-    S -->|"sent as constraints in every<br/>future prompt for that role"| C["next run passes first time"]
+    S -->|"--objective runs: sent to the planner,<br/>shaping how work is split and checked"| PL["planner"]
+    S -->|"sent as constraints in every<br/>future prompt for that role"| W["workers"]
+    PL --> C["next run passes first time"]
+    W --> C
 ```
 
 ## Example: `examples/slugify/plan.json`
