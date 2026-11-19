@@ -131,6 +131,8 @@ gated tasks is enforced by the engine.
 
 ## Architecture
 
+Visual walkthrough: [DIAGRAMS.md](DIAGRAMS.md).
+
 ```
 plan (JSON / list[Task]) ──validate──▶ Orchestrator ──▶ Worker(ctx) ──▶ checks(task, out)
                                           │   ▲                              │
