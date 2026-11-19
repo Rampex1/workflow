@@ -73,7 +73,7 @@ Cite every claim about the codebase (`path:line`) and every outside fact (URL). 
 ## 5. Check and review
 
 - **Traceability:** every requirement maps to a part of the design and to a milestone. List any gaps and fix them.
-- **Adversarial review:** give the doc and the requirements (not your reasoning) to one or two reviewers with different lenses, for example `reviewer` for feasibility and correctness, and a general-purpose agent for requirements coverage and clarity to a new reader. Ask for findings by severity. Fix the real ones. If blockers remain after two rounds, report them instead of looping.
+- **Adversarial review:** give the doc and the requirements (not your reasoning) to one or two reviewers with different lenses, for example `reviewer` for feasibility and correctness, and a general-purpose agent for requirements coverage and clarity to a new reader. Ask for findings by severity. Don't pre-judge: never tell a reviewer what not to flag. Fix the real ones; log each rejected finding in `research/decisions.md` with why. If blockers remain after two rounds, report them instead of looping.
 
 ## 6. Report
 

@@ -18,4 +18,6 @@ Report each finding as:
 - **Problem**, and a concrete scenario where it goes wrong.
 - **Fix:** what you'd change.
 
-Report only findings you can support from the code; mark anything uncertain as such. If you find nothing serious, say so plainly; don't invent problems. End with an overall verdict: ship, fix first, or rethink.
+Report only findings you can support from the code; mark anything uncertain as such. If you find nothing serious, say so plainly; don't invent problems. End with two separate verdicts, so one can't hide the other:
+- **Spec compliance:** does it do exactly what the plan or task asked, nothing missing and nothing extra? Pass or fail, listing each gap.
+- **Quality:** ship, fix first, or rethink.
