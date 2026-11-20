@@ -28,7 +28,7 @@ The skills keep a record of their work in `research/` at the repo root: `finding
 ## Skills
 
 - `/design <project or requirement docs>`: requirements and questions, research by a crew chosen for the project, key decisions for you to approve, then a cited design doc reviewed adversarially, ending with milestones sized for `/feature`.
-- `/feature <task or milestone>`: runs a change end to end, orchestrating a crew it picks from the subagents below. A plan-mode plan (`researcher` agents, every decision with alternatives) for you to approve. Then, without check-ins, on a local `feature/<slug>` branch (never pushed): a baseline test run, failing tests first (`test-writer`), implementation, independent review (`reviewer`, plus `/code-review` for big changes), with a Progress log that survives compaction and every judgment call logged as a ruling. Ends with a report: commits, rulings, and proposed lessons for `CLAUDE.md`.
+- `/feature <task or milestone>`: runs a change end to end, orchestrating a crew it picks from the subagents below. A plan-mode plan (`researcher` agents, every decision with alternatives) for you to approve. Then, without check-ins, on a local `feature/<slug>` branch (never pushed): a baseline test run, failing tests first (`test-writer`), implementation, independent review (`reviewer`, plus `/code-review` for big changes), with a Progress log that survives compaction and every judgment call logged as a ruling. A Stop hook (`stop-gate.sh`) blocks it from finishing while the plan's "done means" commands fail. Ends with a report: commits, rulings, and proposed lessons for `CLAUDE.md`.
 
 ## Subagents
 

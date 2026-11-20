@@ -3,6 +3,12 @@ name: feature
 description: Build a feature, fix or design milestone in an existing codebase end to end, with little back-and-forth. Orchestrates a crew of subagents chosen for the task. Plan in plan mode with an explicit list of decisions, failing tests first, implement until they pass, independent review, then report with proposed CLAUDE.md lessons.
 disable-model-invocation: true
 argument-hint: <what to build or fix>
+hooks:
+  Stop:
+    - hooks:
+        - type: command
+          command: '"$HOME/.claude/skills/feature/stop-gate.sh"'
+          timeout: 600
 ---
 
 # /feature
@@ -58,6 +64,8 @@ Give the `test-writer` the agreed test cases, the test conventions and the test 
 
 ## 3. Implement
 
+**Arm the stop gate first.** Write the "done means" commands to `research/.gate` as a shell script (e.g. `npm test --silent && npm run lint`). This skill's Stop hook runs it whenever you try to finish and blocks you while it fails, so "done" means the check passes, not that you think it does. Never edit `research/.gate` to make it pass. If you must stop under the stop list, delete it and log a Ruling saying why.
+
 - Make the smallest change that satisfies the plan, until every "done means" command passes.
 - Never weaken, skip or edit the agreed tests to make them pass.
 - Work outside the plan (a refactor, an extra fix, a new dependency) goes in the report, not the code.
@@ -68,6 +76,8 @@ Give the `test-writer` the agreed test cases, the test conventions and the test 
 Write the diff of the whole change against the branch point to a file (e.g. `git diff <base>... > research/plans/<slug>.diff`), and give the `reviewer` its path, the approved plan and the test command. Don't send your reasoning, and don't pre-judge: never tell it what not to flag or that "the plan chose" something. For a large or risky change, also run the `code-review` skill. Check each finding yourself, fix the real ones, rerun the commands, and commit. Never drop a finding silently: log each rejected one in Progress as a ruling.
 
 ## 5. Report
+
+Before reporting, delete `research/.gate` and `research/.gate-blocks`, so the gate doesn't block the rest of the session.
 
 - **Branch and commits:** the branch name and its commits (not pushed).
 - **Changed:** each file, briefly.
