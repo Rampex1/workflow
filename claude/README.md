@@ -13,6 +13,13 @@ for f in agents/*.md; do ln -sf "$PWD/$f" ~/.claude/agents/; done
 
 Start a new Claude Code session to pick them up. Rerun only when you add a new skill or subagent.
 
+## Plugins
+
+```sh
+claude plugin marketplace add ayghri/i-have-adhd
+claude plugin install i-have-adhd@i-have-adhd   # /i-have-adhd: action-first, numbered, no-tangent replies
+```
+
 ## Context
 
 Put anything that isn't in the codebase (a mentor's requirements doc, meeting notes, Slack threads, API specs) in `context/` at the root of the repo you're working in. Both skills read it, along with the codebase, before asking anything. Keep it out of git without touching the team's `.gitignore`:
