@@ -65,7 +65,7 @@ Write it to `research/design/<slug>.md`, citing the `research/findings/` files i
 2. **Goals and non-goals.**
 3. **Requirements:** the numbered list from step 1.
 4. **Current state:** the relevant existing system, with `path:line` citations.
-5. **Proposed design:** components, data model, APIs or interfaces, the main flows, error handling, security and observability. Draw the diagrams with the `archify` skill (architecture for components, sequence or workflow for the main flows, ERD for the data model; code-backed where they show existing code). Save them in `research/design/<slug>-diagrams/` and link each one from the doc where it applies. If `archify` isn't installed, use Mermaid in the doc instead.
+5. **Proposed design:** components, data model, APIs or interfaces, the main flows, error handling, security and observability. Draw the diagrams with the `archify` skill (architecture for components, sequence or workflow for the main flows, ERD for the data model; code-backed where they show existing code). Save each as `research/design/<slug>-diagrams/<name>.html`. Then export a PNG so the doc shows it anywhere (GitHub, a wiki): run `node ~/.claude/skills/archify/bin/archify.mjs visual-check <name>.html --summary --out-dir <tmp>`, copy its `2048x1320.light.png` capture to `<name>.png` beside the HTML, and delete `<tmp>`. In the doc, embed each PNG with a link to its interactive version: `![<caption>](<slug>-diagrams/<name>.png)` then `[Interactive version](<slug>-diagrams/<name>.html)`. If `archify` isn't installed or the export fails, use Mermaid in the doc instead.
 6. **Alternatives considered,** and why each lost.
 7. **Risks and mitigations.**
 8. **Testing and rollout:** how each part will be verified, and how it ships safely.
