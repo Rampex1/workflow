@@ -7,22 +7,15 @@ My Claude Code skills and subagents.
 ```sh
 # from this folder: symlink, so edits here apply right away
 mkdir -p ~/.claude/skills ~/.claude/agents
-for d in skills/*/; do ln -sfn "$PWD/$d" ~/.claude/skills/$(basename "$d"); done
+for d in skills/*/; do [ "$d" = skills/external/ ] || ln -sfn "$PWD/$d" ~/.claude/skills/$(basename "$d"); done
 for f in agents/*.md; do ln -sf "$PWD/$f" ~/.claude/agents/; done
 ```
 
 Start a new Claude Code session to pick them up. Rerun only when you add a new skill or subagent.
 
-## Plugins
+## External
 
-```sh
-claude plugin marketplace add ayghri/i-have-adhd
-claude plugin install i-have-adhd@i-have-adhd   # /i-have-adhd: action-first, numbered, no-tangent replies
-
-# Archify: interactive HTML diagrams and explainers ("use Archify to diagram this repo")
-git clone --depth 1 https://github.com/tt-a1i/archify /tmp/archify && cp -R /tmp/archify/archify ~/.claude/skills/archify
-node ~/.claude/skills/archify/bin/archify.mjs doctor
-```
+Skills and plugins by others that I've installed: one folder each in [`skills/external/`](skills/external/), with source, install command and usage (archify, graphify, i-have-adhd, impeccable, ponytail).
 
 ## Context
 
