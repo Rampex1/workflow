@@ -18,6 +18,10 @@ Start a new Claude Code session to pick them up. Rerun only when you add a new s
 ```sh
 claude plugin marketplace add ayghri/i-have-adhd
 claude plugin install i-have-adhd@i-have-adhd   # /i-have-adhd: action-first, numbered, no-tangent replies
+
+# Archify: interactive HTML diagrams and explainers ("use Archify to diagram this repo")
+git clone --depth 1 https://github.com/tt-a1i/archify /tmp/archify && cp -R /tmp/archify/archify ~/.claude/skills/archify
+node ~/.claude/skills/archify/bin/archify.mjs doctor
 ```
 
 ## Context
