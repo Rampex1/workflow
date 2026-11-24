@@ -15,7 +15,7 @@ Start a new Claude Code session to pick them up. Rerun only when you add a new s
 
 ## Phone notifications
 
-Per session and off by default. When on, a Telegram bot messages you "Claude finished: <project>" each time Claude finishes a task.
+Per session and off by default. When on, a Telegram bot messages you "Claude finished: <project>" plus the tail of Claude's last message each time Claude finishes a task. While notifications are on, Claude ends a reply with `⏭ more to do` when work is left; then the message reads "Paused, more to do" and has a **Continue** button: tap it (within an hour) and that session picks up again as if you'd typed "continue". The paused message also shows your plan usage (`session 23% (resets 17:00) · week 41%`) so you can decide whether to spend more. Otherwise it reads "Done", with no button. In a long session, if Claude seems to have forgotten the marker, run `/notify on` again. Needs `jq`.
 
 One-time setup: install the `/notify` skill (the Install loop above), symlink the hook and add it to `~/.claude/settings.json`:
 
@@ -25,9 +25,11 @@ mkdir -p ~/.claude/hooks && ln -sf "$PWD/hooks/notify-phone.sh" ~/.claude/hooks/
 
 ```json
 "hooks": {
-  "Stop": [{ "hooks": [{ "type": "command", "command": "\"$HOME/.claude/hooks/notify-phone.sh\"" }] }]
+  "Stop": [{ "hooks": [{ "type": "command", "command": "\"$HOME/.claude/hooks/notify-phone.sh\"", "asyncRewake": true, "timeout": 3700 }] }]
 }
 ```
+
+Usage comes from the status line (hooks don't receive it), so also symlink `hooks/statusline.sh` the same way and add `"statusLine": { "type": "command", "command": "\"$HOME/.claude/hooks/statusline.sh\"" }`. It shows the same usage line at the bottom of the terminal.
 
 Turn it on:
 
@@ -39,7 +41,7 @@ Turn it on:
 printf 'TELEGRAM_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\n' '<TOKEN>' '<CHAT_ID>' > ~/.claude/telegram.env && chmod 600 ~/.claude/telegram.env
 ```
 
-Then, in any session, type `/notify on` or `/notify off`. It applies to that session only; new sessions start off.
+Then, in any session, type `/notify on`, `/notify on <name>` (titles that session's messages, e.g. `/notify on auth refactor`, so you can tell sessions apart; default is the project folder name) or `/notify off`. It applies to that session only; new sessions start off.
 
 ## External
 
