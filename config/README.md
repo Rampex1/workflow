@@ -2,6 +2,8 @@
 
 My terminal setup: Herdr (desktop app) → Neovim (LazyVim), all on Catppuccin Mocha. Ghostty is the plain terminal; tmux is kept for reference but no longer auto-starts.
 
+Migrating to a new machine or tool? Give [`SETUP-PROMPT.md`](SETUP-PROMPT.md) to an AI assistant: it describes the whole setup and the reasons behind it.
+
 | Folder       | Goes to                  |
 | ------------ | ------------------------ |
 | `herdr/`     | `~/.config/herdr-app/`   |
