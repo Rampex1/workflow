@@ -13,6 +13,34 @@ for f in agents/*.md; do ln -sf "$PWD/$f" ~/.claude/agents/; done
 
 Start a new Claude Code session to pick them up. Rerun only when you add a new skill or subagent.
 
+## Phone notifications
+
+Per session and off by default. When on, a Telegram bot messages you "Claude finished: <project>" each time Claude finishes a task.
+
+One-time setup: install the `/notify` skill (the Install loop above), symlink the hook and add it to `~/.claude/settings.json`:
+
+```sh
+mkdir -p ~/.claude/hooks && ln -sf "$PWD/hooks/notify-phone.sh" ~/.claude/hooks/
+```
+
+```json
+"hooks": {
+  "Stop": [{ "hooks": [{ "type": "command", "command": "\"$HOME/.claude/hooks/notify-phone.sh\"" }] }]
+}
+```
+
+Turn it on:
+
+1. In Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot`, and copy the token it gives you.
+2. Send your new bot any message, then get your chat id from `curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates"` (the `"chat":{"id":...}` number).
+3. Save both once, in `~/.claude/telegram.env` (outside every repo; the token is a secret, so keep it private):
+
+```sh
+printf 'TELEGRAM_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\n' '<TOKEN>' '<CHAT_ID>' > ~/.claude/telegram.env && chmod 600 ~/.claude/telegram.env
+```
+
+Then, in any session, type `/notify on` or `/notify off`. It applies to that session only; new sessions start off.
+
 ## External
 
 Skills and plugins by others that I've installed: one folder each in [`skills/external/`](skills/external/), with source, install command and usage (archify, graphify, i-have-adhd, impeccable, ponytail).
