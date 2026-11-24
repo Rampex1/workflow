@@ -1,10 +1,11 @@
 #!/bin/sh
 # Stop hook (asyncRewake): messages "Claude finished" to your phone through a Telegram bot,
-# with a Continue button. Tapping it wakes this session with "continue" (exit 2 = rewake).
+# with a Continue button (when Claude paused with more to do). Tapping it, or replying to the
+# message in Telegram, wakes this session with "continue" or your reply as the prompt (exit 2 = rewake).
 # Credentials live in ~/.claude/telegram.env (TELEGRAM_TOKEN, TELEGRAM_CHAT_ID). Needs jq.
 # Per session, off by default: `/notify on [name]` creates ~/.claude/notify-phone.d/<session id>, holding the title.
 # ponytail: flag files of ended sessions are never cleaned up; they're tiny, delete the folder anytime.
-# ponytail: sessions share one bot; a tap is only seen while its own session polls (up to 1h after stop).
+# ponytail: sessions share one bot; a tap or reply is only seen while its own session polls (up to 1h after stop).
 in=$(cat)
 sid=$(printf '%s' "$in" | jq -r '.session_id // empty')
 d="$HOME/.claude/notify-phone.d"
@@ -38,26 +39,37 @@ if [ "$paused" = true ]; then
 $excerpt" --data-urlencode 'reply_markup={"inline_keyboard":[[{"text":"▶ Continue","callback_data":"go"}]]}' \
     | jq -r '.result.message_id // empty')
 else
-  send "✅ <b>$title</b>
+  msg=$(send "✅ <b>$title</b>
 
-$excerpt" >/dev/null
-  rm -f "$d/$sid.pid"
-  exit 0
+$excerpt" | jq -r '.result.message_id // empty')
 fi
-[ -n "$msg" ] || exit 0
+[ -n "$msg" ] || { rm -f "$d/$sid.pid"; exit 0; }
 
+# Wait up to 1h for a Continue tap, or a Telegram reply to this message (sent to Claude as the prompt).
+# Only updates from your own chat count: a reply becomes a prompt with this session's tool access.
 end=$(( $(date +%s) + 3600 ))
 while [ "$(date +%s)" -lt "$end" ]; do
-  hit=$(curl -s -m 10 "$api/getUpdates?allowed_updates=%5B%22callback_query%22%5D" | jq -c --argjson m "$msg" \
-    '[.result[]? | select(.callback_query.message.message_id == $m)][0] // empty')
+  hit=$(curl -s -m 10 "$api/getUpdates?allowed_updates=%5B%22callback_query%22%2C%22message%22%5D" \
+    | jq -c --argjson m "$msg" --arg c "$TELEGRAM_CHAT_ID" '[.result[]? | select(
+        (.callback_query.message.message_id == $m and (.callback_query.message.chat.id | tostring) == $c)
+        or (.message.reply_to_message.message_id == $m and (.message.chat.id | tostring) == $c and .message.text))][0] // empty')
   if [ -n "$hit" ]; then
     curl -s -m 5 "$api/getUpdates?offset=$(( $(printf '%s' "$hit" | jq .update_id) + 1 ))&timeout=0" >/dev/null
-    curl -s -m 5 "$api/answerCallbackQuery" --data-urlencode "callback_query_id=$(printf '%s' "$hit" | jq -r .callback_query.id)" \
-      --data-urlencode "text=Continuing" >/dev/null
     curl -s -m 5 "$api/editMessageReplyMarkup" --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
       --data-urlencode "message_id=$msg" >/dev/null
     rm -f "$d/$sid.pid"
-    echo "The user tapped Continue on their phone: continue working on the task." >&2
+    cq=$(printf '%s' "$hit" | jq -r '.callback_query.id // empty')
+    if [ -n "$cq" ]; then
+      curl -s -m 5 "$api/answerCallbackQuery" --data-urlencode "callback_query_id=$cq" \
+        --data-urlencode "text=Continuing" >/dev/null
+      echo "The user tapped Continue on their phone: continue working on the task." >&2
+    else
+      curl -s -m 5 "$api/setMessageReaction" --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+        --data-urlencode "message_id=$(printf '%s' "$hit" | jq .message.message_id)" \
+        --data-urlencode 'reaction=[{"type":"emoji","emoji":"👍"}]' >/dev/null
+      printf 'The user replied from their phone. Treat this as their next prompt:\n%s\n' \
+        "$(printf '%s' "$hit" | jq -r .message.text)" >&2
+    fi
     exit 2
   fi
   sleep 3
