@@ -16,23 +16,31 @@ api="https://api.telegram.org/bot$TELEGRAM_TOKEN"
 [ -f "$d/$sid.pid" ] && kill "$(cat "$d/$sid.pid")" 2>/dev/null
 echo $$ > "$d/$sid.pid"
 
-full=$(printf '%s' "$in" | jq -r '.last_assistant_message // ""')
-last=$(printf '%s' "$full" | tail -c 600)
-proj=$(cat "$d/$sid")  # title from `/notify on <name>`
-[ -n "$proj" ] || proj=$(basename "${CLAUDE_PROJECT_DIR:-$PWD}")
+# HTML escaping for Telegram's parse_mode=HTML.
+esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+title=$(cat "$d/$sid")  # from `/notify on <name>`
+[ -n "$title" ] || title=$(basename "${CLAUDE_PROJECT_DIR:-$PWD}")
+title=$(printf '%s' "$title" | esc)
 # /notify on asks Claude to end a reply with "⏭ more to do" when work remains.
-if printf '%s' "$full" | tail -c 200 | grep -q '⏭ more to do'; then
-  msg=$(curl -s -m 10 "$api/sendMessage" \
-    --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
-    --data-urlencode "text=⏸ Paused, more to do: $proj
-$(cat "$d/usage.txt" 2>/dev/null)
-$last" \
-    --data-urlencode 'reply_markup={"inline_keyboard":[[{"text":"▶ Continue","callback_data":"go"}]]}' \
+paused=$(printf '%s' "$in" | jq -r '.last_assistant_message // "" | test("⏭ more to do\\s*$")')
+# Excerpt: marker dropped, last ~400 chars starting at a line (or word) boundary.
+excerpt=$(printf '%s' "$in" | jq -r '.last_assistant_message // ""
+  | sub("\\s*⏭ more to do\\s*$"; "") | sub("\\s+$"; "")
+  | if length > 400 then .[-400:] | (if test("\n") then sub("^[^\n]*\n"; "") else sub("^\\S*\\s+"; "") end) | "…" + . else . end
+  | gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;")')
+send() { t=$1; shift; curl -s -m 10 "$api/sendMessage" --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+  --data-urlencode "parse_mode=HTML" --data-urlencode "text=$t" "$@"; }
+if [ "$paused" = true ]; then
+  usage=$(cat "$d/usage.txt" 2>/dev/null)
+  msg=$(send "⏸ <b>$title</b>${usage:+
+📊 $usage}
+
+$excerpt" --data-urlencode 'reply_markup={"inline_keyboard":[[{"text":"▶ Continue","callback_data":"go"}]]}' \
     | jq -r '.result.message_id // empty')
 else
-  curl -s -m 10 "$api/sendMessage" --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
-    --data-urlencode "text=✅ Done: $proj
-$last" >/dev/null
+  send "✅ <b>$title</b>
+
+$excerpt" >/dev/null
   rm -f "$d/$sid.pid"
   exit 0
 fi
