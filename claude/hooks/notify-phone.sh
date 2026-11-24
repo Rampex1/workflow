@@ -11,6 +11,17 @@ sid=$(printf '%s' "$in" | jq -r '.session_id // empty')
 d="$HOME/.claude/notify-phone.d"
 [ -n "$sid" ] && [ -f "$d/$sid" ] || exit 0
 . "$HOME/.claude/telegram.env" 2>/dev/null || exit 0
+
+# Claude stops while waiting on a background subagent and is woken when it reports back (a
+# <task-notification> naming the launch's tool_use_id). Stay quiet until no agent is pending.
+# ponytail: background shells (run_in_background) aren't counted: a dev server never "finishes".
+tp=$(printf '%s' "$in" | jq -r '.transcript_path // empty')
+if [ -f "$tp" ]; then
+  for id in $(jq -r 'select(.type=="user") | .message.content | arrays | .[]
+      | select(.type=="tool_result" and ((.content|tostring)|test("Async agent launched"))) | .tool_use_id' "$tp"); do
+    grep -q "<tool-use-id>$id</tool-use-id>" "$tp" || exit 0
+  done
+fi
 api="https://api.telegram.org/bot$TELEGRAM_TOKEN"
 
 # Only the latest notification per session keeps listening.
