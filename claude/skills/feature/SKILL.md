@@ -30,7 +30,7 @@ Skip roles that add nothing; a docs-only change needs no `test-writer`. If one o
 
 ## 1. Plan (plan mode)
 
-Enter plan mode unless you're already in it. Read `CLAUDE.md`, everything in `context/` at the repo root (requirement docs and notes the user dropped there; it isn't committed), and the relevant parts of `research/` (earlier findings, decisions and the design doc), then launch the `researcher` agents in parallel, in one message, each with one narrow question: where the change belongs, the most similar existing code to reuse, the conventions that apply, and the exact commands to run the relevant tests and the build or lint. Verify anything a decision rests on by reading the code yourself.
+Enter plan mode unless you're already in it. Read `CLAUDE.md`, everything in `context/` at the repo root (requirement docs and notes the user dropped there; it isn't committed), and the relevant parts of `research/` (earlier findings, decisions and the design doc), then launch the `researcher` agents in parallel, in one message, each with one narrow question: where the change belongs, the most similar existing code to reuse, every caller or consumer of the code you'll change (so a fix lands where all of them route through), the conventions that apply, and the exact commands to run the relevant tests and the build or lint. Verify anything a decision rests on by reading the code yourself.
 
 The plan must contain:
 

@@ -50,7 +50,7 @@ Write `research/onboarding/<repo>.md`. Two pages at most: cut anything the user 
 
 1. **What it is:** one paragraph, then the architecture diagram: `![Architecture](<repo>-diagrams/architecture.png)` and `[Interactive version](<repo>-diagrams/architecture.html)`.
 2. **Reading order:** about 10 files to read, in order, one line each on why.
-3. **Key flows:** each as numbered steps with `path:line`, plus its sequence diagram.
+3. **Key flows:** each as numbered steps with `path:line`, plus its sequence diagram. End with one line naming the flows you found but didn't trace, each with its entry point `path:line`.
 4. **Where changes go:** "To add X, edit Y" for the 3–5 most common changes.
 5. **Run, test, debug:** the commands from step 3, and the gotchas you hit.
 6. **Conventions:** the few rules a reviewer would flag.
