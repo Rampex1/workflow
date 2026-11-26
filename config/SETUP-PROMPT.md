@@ -1,18 +1,18 @@
 # Terminal setup: instructions for an AI assistant
 
-You are setting up my terminal environment on a new machine, or moving it to a new tool. Read this whole file first. It states what I want and why, so you can rebuild it on whatever tools are current without asking me. The config files next to this file (`herdr/`, `nvim/`, `ghostty/`, `tmux/`) are the last working implementation. Use them directly where the tools are the same, and treat them as a reference where they aren't.
+You are setting up my terminal environment on a new machine, or moving it to a new tool. Read this whole file first. It states what I want and why, so you can rebuild it on whatever tools are current without asking me. The config files next to this file (`rex/`, `nvim/`, `ghostty/`) are the last working implementation; `herdr/` and `tmux/` are the ones before it. Use them directly where the tools are the same, and treat them as a reference where they aren't.
 
 Work on your own: read my existing configs, make the changes, test what you can, and tell me what you couldn't test. Only ask me when a choice genuinely conflicts with something below.
 
 ## The stack
 
-- **Workspace manager:** the Herdr desktop app (herdr.dev). It holds spaces (one per project), tabs and split panes, and tracks coding agents (Claude Code and others) in a sidebar. It replaced tmux.
+- **Workspace manager:** the Rex desktop app (superlogical.com/rex). It holds sessions (one per project), tabs and split panes, and tracks coding agents (Claude Code and others) in its Activity sidebar. It replaced the Herdr app, which replaced tmux. Herdr's "spaces" are Rex sessions.
 - **Editor:** Neovim with LazyVim, mostly stock.
 - **Plain terminal:** Ghostty, for when I want a bare shell. It must not auto-start anything.
 - **Shell:** zsh.
 - **Look everywhere:** Catppuccin Mocha, JetBrains Mono at size 18, a slightly see-through (about 90% opaque) blurred background.
 
-If Herdr is gone or replaced, carry the behaviour below over to whatever plays its role (tmux, zellij, WezTerm and so on).
+If Rex is gone or replaced, carry the behaviour below over to whatever plays its role (Herdr, tmux, zellij, WezTerm and so on).
 
 ## Rules
 
@@ -35,13 +35,17 @@ These move left, down, up and right. The same key works across these levels, in 
 4. **From the leftmost pane, Ctrl-h:** move into the sidebar (Spaces and Agents panels).
 5. **In the sidebar:** Ctrl-j/k move between the Spaces and Agents panels, and Ctrl-l goes back to the terminal.
 
+Rex's sidebar can't take keyboard focus (as of Rex 0.1.0-preview), so levels 4 and 5 only exist in Herdr. In Rex, use the pickers (`Ctrl-s s`, `Ctrl-s w`) and `Cmd-.` (Activity) instead.
+
+Rex also has no way to stack a Spaces panel over an Agents panel: it has no panel or mod system. The closest match, set by `rex/settings.sh`, is the sidebar on the left listing sessions and their tabs, with agent status shown on each tab, and `Cmd-.` swapping the list for Activity grouped by session.
+
 How it works:
 - The workspace manager checks what's running in the focused pane. If it matches vim, nvim or fzf (vim-tmux-navigator's pattern, `(view|l?n?vim?x?|fzf)(diff)?`), the key goes to the program. Otherwise it moves panes.
-- Neovim maps Ctrl-h/j/k/l to `wincmd`. When the window didn't change (an edge), it tells the workspace manager to move. In Herdr that's `herdr-app do pane.go '{"direction":"left"}'`. It only does this inside Herdr, detected with the `HC_TERMINAL_ID` environment variable.
+- Neovim maps Ctrl-h/j/k/l to `wincmd`. When the window didn't change (an edge), it tells the workspace manager to move. In Rex that's `rex api call -s $REX_BLOCK session.focus_direction '{"direction":"left"}'`, used when `REX_BLOCK` is set. In Herdr it's `herdr-app do pane.go '{"direction":"left"}'`, used when `HC_TERMINAL_ID` is set.
 
 Trade-off I've accepted: zsh loses Ctrl-l (clear screen), Ctrl-h (backspace), Ctrl-j and Ctrl-k. tmux took these too.
 
-### The sidebar panels
+### The sidebar panels (Herdr only)
 
 The Spaces and Agents panels can take keyboard focus. In Herdr the shipped ones can't, so they're cloned as `spaces-nav` and `agents-nav` with `"focusable": true`. The panel with focus shows its title in the accent colour, and the highlight clears when focus leaves.
 
@@ -71,22 +75,27 @@ The Spaces and Agents panels can take keyboard focus. In Herdr the shipped ones 
 | `&` | Close tab |
 | `z` | Zoom the pane, or unzoom |
 | `,` | Rename tab |
-| `$` | Rename space |
-| `(` / `)` | Previous / next space |
-| `w` / `s` | Open the picker (spaces, tabs, agents) |
+| `$` | Rename space (Rex: session) |
+| `(` / `)` | Previous / next space (Rex: session) |
+| `w` / `s` | Open the picker (Rex: `w` Go to Anything, `s` session picker) |
+| `r` | Reload config (Rex) |
+| Ctrl-s | Send a real Ctrl-s to the program (Rex) |
 
 Tabs are h/l, not n/p. I don't want Shift-H/L or Ctrl-Shift-H/L for tabs; I tried them and reverted.
 
 ### App defaults I keep
 
-Keep the Herdr app's own shortcuts: Cmd-T new tab, Cmd-W close tab, Cmd-1–9 go to tab, Ctrl-1–9 go to space, Cmd-N new space, Shift-F2 rename space, F2 rename tab, Cmd-] / Cmd-[ next or previous agent, Cmd-P picker, Cmd-D / Cmd-Shift-D split, Cmd-B toggle sidebar.
+In Rex: keep Rex's own defaults (Cmd-T, Cmd-1–9, Cmd-N, Cmd-K, Cmd-P, Cmd-D / Cmd-Shift-D, Cmd-W closes the pane, else the tab) and add the Herdr ones it lacks: Ctrl-1–9 go to session, F2 rename tab, Shift-F2 rename session, Cmd-B toggle sidebar.
+
+In Herdr, keep the Herdr app's own shortcuts: Cmd-T new tab, Cmd-W close tab, Cmd-1–9 go to tab, Ctrl-1–9 go to space, Cmd-N new space, Shift-F2 rename space, F2 rename tab, Cmd-] / Cmd-[ next or previous agent, Cmd-P picker, Cmd-D / Cmd-Shift-D split, Cmd-B toggle sidebar.
 
 ## Look
 
 - **Theme:** Catppuccin Mocha. Herdr needs a theme file (`themes/catppuccin-mocha.json`) with the standard Mocha palette, set in `settings.json`.
 - **Font:** JetBrains Mono, size 18, ligatures off.
 - **Background:** blurred, about 90% opaque. In Herdr this needs a cloned layout (`layouts/ghostty.json`) with `"window_blur": true` and `background`, `canvas` and `chrome` colours ending in alpha `e6`.
-- **Option key works as Alt:** Ghostty `macos-option-as-alt = true`, Herdr `"option_as_alt": "on"`.
+- **Option key works as Alt:** Ghostty `macos-option-as-alt = true`, Herdr `"option_as_alt": "on"`, Rex Option key "sends Alt".
+- **Rex:** these live in the app, not a file, so `rex/settings.sh` sets them with `rex do client.setting.…`. Rex has no opacity number; the Glass interface style with glass panes is its blurred see-through look, and it needs macOS 26 (on macOS 15 the script skips it and the background stays solid). Font is `JetBrainsMono Nerd Font Mono` (what's installed). Rex doesn't ship Catppuccin, so `rex/Catppuccin Mocha Official` (Ghostty theme format, official palette with a `#585b70` selection) is imported. Don't use Ghostty's bundled copy: its selection is rosewater and its bright colours are lightened. "Tint with theme" must be on, or the sidebar and window frame stay neutral grey. Fade inactive panes by text only; fading the surface turns them grey.
 
 ## Neovim
 
@@ -96,7 +105,19 @@ Keep the Herdr app's own shortcuts: Cmd-T new tab, Cmd-W close tab, Cmd-1–9 go
 - `lua/config/keymaps.lua` holds the Ctrl-h/j/k/l edge-navigation mapping. There's no vim-tmux-navigator plugin.
 - A running Neovim only picks up keymap changes after a restart. Tell me to restart it rather than debugging something else.
 
-## Herdr implementation notes
+## Rex implementation notes
+
+Everything lives in `~/.config/rex/init.lua`, which is `config/rex/init.lua` in this repo, plus the app settings in `config/rex/settings.sh`.
+
+- **Ctrl-h/j/k/l** are Lua function bindings. Each calls the terminal block's `process` method, checks the foreground program's name against the vim pattern, and returns `false` (Rex then sends the key to the program) or calls `rex.session.focus_direction`.
+- **Ctrl-s prefix** keys are key sequences (`ctrl+s>c`). Shifted symbols are written unshifted: `"` is `shift+'`, `%` is `shift+5`, `&` is `shift+7`, `$` is `shift+4`, `(`/`)` are `shift+9`/`shift+0`.
+- **Ctrl-1–9** run the custom action `session_goto`, which picks the Nth session from `session.list` and asks the app to select it.
+- **Reloading:** Rex doesn't watch the file. Run `rex config reload` (or `Ctrl-s r`). `rex config check FILE` validates a draft; `rex keymap` lists what loaded.
+- **App settings** need Remote Control on (Settings → General). That's my call; tell me rather than turning it on.
+- **Checking work:** `rex -C <client> actions` lists action names and arguments; `rex do <action>` runs one; `rex send-key -b BLOCK ctrl+l` sends a key straight to a program (it skips Rex's own bindings, so it tests nvim's mapping, not `init.lua`'s).
+- **Updating the repo:** copy `~/.config/rex/init.lua` back to `config/rex/`.
+
+## Herdr implementation notes (legacy)
 
 Everything lives in `~/.config/herdr-app/`, which is `config/herdr/` in this repo.
 
@@ -117,13 +138,14 @@ Everything lives in `~/.config/herdr-app/`, which is `config/herdr/` in this rep
 - `.zshrc` does not auto-start tmux or herdr.
 - `~/.local/bin` is on PATH, where `herdr-app` and `hc` live.
 
-## Phone access
+## Phone access (Herdr)
 
 The Herdr phone app connects to the Mac over SSH. It needs Remote Login on (System Settings → General → Sharing, allowed for my user only), my username, and port 22. For use away from home Wi-Fi, use Tailscale and its machine name. The Mac has to be awake. Turning on SSH is my call; tell me the steps rather than doing it.
 
 ## When something doesn't work
 
-- **Keys do nothing:** check the app reloaded (`keys.error` and `herdr-app status`), and that the shortcut isn't being typed into the terminal version of herdr running inside the app.
+- **Rex keys do nothing:** run `rex config reload` and `rex config check`, and check the app hasn't set its own shortcut for that key (app shortcuts beat `init.lua`).
+- **Herdr keys do nothing:** check the app reloaded (`keys.error` and `herdr-app status`), and that the shortcut isn't being typed into the terminal version of herdr running inside the app.
 - **Can't leave Neovim with Ctrl-h/j/k/l:** Neovim was probably opened before the keymap existed. Restart it.
 - **The sidebar won't hand focus back:** focus the shown tab's pane directly; don't use `pane.go`.
 - **Report honestly:** tell me what you tested (by running commands or taking screenshots) and what you couldn't test with real keypresses.
