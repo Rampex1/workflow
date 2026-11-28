@@ -37,7 +37,7 @@ r client.setting.interface.appearance.glass value=true
 # Sidebar on the left, like Herdr's Spaces panel: sessions, each with its tabs.
 # Agents: status dots on those tabs, and Cmd-. swaps the list for Activity, grouped by session.
 r client.setting.interface.toolbar.layout value=left
-r client.setting.interface.toolbar.auto_hide_toolbar value=always_show
+r client.setting.interface.toolbar.auto_hide_toolbar value=on_hover # with the sidebar hidden, no floating tab card in the top-left
 r client.setting.notifications.activity.tab_activity value=true
 r client.setting.notifications.activity.system_notifications value=true # macOS notification when a background agent finishes, blocks or fails
 r client.setting.notifications.activity.sounds value=true # chime when an agent blocks, fails or finishes
